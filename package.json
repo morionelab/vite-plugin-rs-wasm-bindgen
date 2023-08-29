@@ -1,0 +1,32 @@
+{
+  "name": "vite-plugin-rs-wasm-bindgen",
+  "version": "0.9.0",
+  "description": "vite plugin for bundling the wasm-bindgen output",
+  "keywords": [
+    "vite-plugin",
+    "rust",
+    "wasm-bindgen"
+  ],
+  "homepage": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen#readme",
+  "bugs": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen/issues",
+  "license": "MIT",
+  "author": "morionelab <morionelab@gmail.com>",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen"
+  },
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "devDependencies": {
+    "rollup": "^3.28.1",
+    "rollup-plugin-ts": "^3.4.4",
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9"
+  }
+}
