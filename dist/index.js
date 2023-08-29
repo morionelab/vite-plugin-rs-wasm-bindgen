@@ -127,7 +127,7 @@ function execCargoMetadata(context, meta, opts) {
             if (buildProfile === null) {
                 buildProfile = release ? "release" : "debug";
             }
-            meta.inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", buildProfile, name.replace('-', '_') + ".wasm");
+            meta.inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", buildProfile, name.replace(/-/g, '_') + ".wasm");
             if (verbose) {
                 console.info(`resolved input wasm of ${meta.rawId}: ${meta.inputWasmPath}`);
             }

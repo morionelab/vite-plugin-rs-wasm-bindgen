@@ -129,7 +129,7 @@ export async function execCargoMetadata(
       targetDirectory,
       "wasm32-unknown-unknown",
       buildProfile,
-      name.replace('-', '_') + ".wasm"
+      name.replace(/-/g, '_') + ".wasm"
     );
 
     if (verbose) {
