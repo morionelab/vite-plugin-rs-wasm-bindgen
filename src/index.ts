@@ -22,7 +22,6 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     name: PLUGIN_NAME,
 
     configResolved(config) {
-      console.log(config.configFile);
       root = config.root;
       release = config.isProduction;
 

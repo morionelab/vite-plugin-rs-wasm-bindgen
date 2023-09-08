@@ -284,7 +284,6 @@ function rsWasmBindgen(options) {
     return {
         name: PLUGIN_NAME,
         configResolved(config) {
-            console.log(config.configFile);
             root = config.root;
             release = config.isProduction;
             for (let id in wasmMetaOptionsMap) {
