@@ -16,6 +16,9 @@
   ],
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "update-wasm": "dist/cli-update-wasm.js"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen"
@@ -23,10 +26,12 @@
   "scripts": {
     "build": "rollup -c"
   },
+  "dependencies": {
+    "vite": "^4.4.9"
+  },
   "devDependencies": {
     "rollup": "^3.28.1",
     "rollup-plugin-ts": "^3.4.4",
-    "typescript": "^5.2.2",
-    "vite": "^4.4.9"
+    "typescript": "^5.2.2"
   }
 }

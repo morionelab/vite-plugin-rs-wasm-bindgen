@@ -1,7 +1,7 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import * as fs from 'node:fs/promises';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -34,171 +34,6 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     var e = new Error(message);
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
-
-function execCargoBuildWasm(context, meta, opts) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let verbose = opts.verbose;
-        let skipReason = null;
-        if (meta.skipBuild) {
-            skipReason = "skipBuild";
-        }
-        else if (meta.manifestPath === null) {
-            skipReason = "no manifestPath";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                console.info(`skip building ${meta.rawId} (${skipReason})`);
-            }
-            return;
-        }
-        let manifestPath = meta.manifestPath;
-        let release = opts.release;
-        let command = "cargo";
-        let args = [];
-        args.push("build", "--lib");
-        args.push("--manifest-path", manifestPath);
-        args.push("--target", "wasm32-unknown-unknown");
-        if (release) {
-            args.push("--release");
-        }
-        const joinedArgs = args.join(" ");
-        try {
-            if (verbose) {
-                console.info(`building ${meta.rawId}: ${command} ${joinedArgs}`);
-            }
-            yield promisify(execFile)(command, args);
-        }
-        catch (error) {
-            context.warn(`building ${meta.rawId} failed: ${command} ${joinedArgs}`);
-        }
-    });
-}
-function execCargoMetadata(context, meta, opts) {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        let verbose = opts.verbose;
-        let skipReason = null;
-        if (meta.skipBindgen) {
-            skipReason = "skipBindgen";
-        }
-        else if (meta.inputWasmPath !== null) {
-            skipReason = "inputWasmPath is set";
-        }
-        else if (meta.manifestPath === null) {
-            skipReason = "no manifestPath";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                console.info(`skip resolving input wasm of ${meta.rawId} (${skipReason})`);
-            }
-            return;
-        }
-        let manifestPath = meta.manifestPath;
-        let release = opts.release;
-        let command = "cargo";
-        let args = [];
-        args.push("metadata", "--no-deps");
-        args.push("--manifest-path", manifestPath);
-        args.push("--format-version", "1");
-        try {
-            if (verbose) {
-                console.info(`resolving input wasm of ${meta.rawId}`);
-            }
-            let { stdout } = yield promisify(execFile)(command, args);
-            let metadata = JSON.parse(stdout);
-            let targetDirectory = metadata["target_directory"];
-            let name = null;
-            for (let package_ of metadata["packages"]) {
-                for (let target of package_["targets"]) {
-                    if (target["crate_types"].includes("cdylib")) {
-                        if (name === null) {
-                            name = target["name"];
-                        }
-                        else {
-                            throw "multiple cdylib targets";
-                        }
-                    }
-                }
-            }
-            if (name === null) {
-                throw "no cdylib target";
-            }
-            let buildProfile = (_a = meta.buildProfile) !== null && _a !== void 0 ? _a : null;
-            if (buildProfile === null) {
-                buildProfile = release ? "release" : "debug";
-            }
-            meta.inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", buildProfile, name.replace(/-/g, '_') + ".wasm");
-            if (verbose) {
-                console.info(`resolved input wasm of ${meta.rawId}: ${meta.inputWasmPath}`);
-            }
-        }
-        catch (error) {
-            context.warn(`resolving input wasm of ${meta.rawId} failed: ${error}`);
-        }
-    });
-}
-function execWasmBindgen(context, meta, opts) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let verbose = opts.verbose;
-        let skipReason = null;
-        if (meta.skipBindgen) {
-            skipReason = "skipBindgen";
-        }
-        else if (meta.inputWasmPath === null) {
-            skipReason = "no inputWasmPath";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                console.info(`skip wasm-bindgen of ${meta.rawId} (${skipReason})`);
-            }
-            return;
-        }
-        let inputWasmPath = meta.inputWasmPath;
-        let command = "wasm-bindgen";
-        let args = [];
-        args.push("--out-dir", meta.bindgenDir);
-        args.push("--out-name", meta.bindgenName);
-        args.push("--target", "bundler");
-        args.push(inputWasmPath);
-        const joinedArgs = args.join(" ");
-        try {
-            if (verbose) {
-                console.info(`bindgen ${meta.rawId}: ${command} ${joinedArgs}`);
-            }
-            yield promisify(execFile)(command, args);
-        }
-        catch (error) {
-            context.warn(`bindgen ${meta.rawId} failed: ${command} ${joinedArgs}`);
-        }
-    });
-}
-
-function createWasmMetaFromOptions(root, id, options) {
-    var _a, _b, _c, _d, _e;
-    const rawId = id;
-    if (typeof options === "string") {
-        options = { manifestPath: options };
-    }
-    const bindgenPath = path.join(root, id);
-    const bindgenDir = path.dirname(bindgenPath);
-    const bindgenName = path.basename(bindgenPath);
-    path.join();
-    const skipBuild = (_a = options.skipBuild) !== null && _a !== void 0 ? _a : false;
-    const manifestPath = (_b = options.manifestPath) !== null && _b !== void 0 ? _b : null;
-    const buildProfile = (_c = options.buildProfile) !== null && _c !== void 0 ? _c : null;
-    const skipBindgen = (_d = options.skipBindgen) !== null && _d !== void 0 ? _d : false;
-    const inputWasmPath = (_e = options.inputWasmPath) !== null && _e !== void 0 ? _e : null;
-    return {
-        rawId,
-        manifestPath,
-        inputWasmPath,
-        skipBuild,
-        buildProfile,
-        skipBindgen,
-        bindgenDir,
-        bindgenName,
-    };
-}
 
 class WasmData {
     constructor(fileName, importModules, exportNames) {
@@ -271,36 +106,310 @@ class WasmData {
     }
 }
 
+function execCargoBuildWasm(args) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const logger = args.logger;
+        const verbose = args.verbose;
+        const suppressError = args.suppressError;
+        const profile = args.profile;
+        const targetId = args.targetId;
+        const manifestPath = args.manifestPath;
+        const skipBuild = args.skipBuild;
+        const ignoreError = args.ignoreError;
+        let skipReason = null;
+        if (skipBuild) {
+            skipReason = "skipBuild";
+        }
+        else if (manifestPath === null) {
+            skipReason = "no manifestPath";
+        }
+        if (skipReason !== null) {
+            if (verbose) {
+                logger.info(`skip building source wasm of ${targetId} (${skipReason})`);
+            }
+            return true;
+        }
+        let command = "cargo";
+        let commandArgs = [];
+        commandArgs.push("build", "--lib");
+        commandArgs.push("--manifest-path", manifestPath);
+        commandArgs.push("--target", "wasm32-unknown-unknown");
+        if (profile == 'release') {
+            commandArgs.push("--release");
+        }
+        else if (profile != 'dev') {
+            commandArgs.push("--profile");
+            commandArgs.push(profile);
+        }
+        try {
+            if (verbose) {
+                const joinedArgs = commandArgs.join(" ");
+                logger.info(`building source wasm of ${targetId}: ${command} ${joinedArgs}`);
+            }
+            yield promisify(execFile)(command, commandArgs);
+        }
+        catch (error) {
+            const ignored = ignoreError ? " (ignored)" : "";
+            logger.error(`building source wasm of ${targetId} failed${ignored}`);
+            if (!suppressError) {
+                process.stderr.write(error.stderr);
+            }
+            return ignoreError;
+        }
+        return true;
+    });
+}
+function execCargoMetadata(args) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const targetId = args.targetId;
+        const skipBindgen = args.skipBindgen;
+        const manifestPath = args.manifestPath;
+        const givenCrateName = args.crateName;
+        const profile = args.profile;
+        const logger = args.logger;
+        const verbose = args.verbose;
+        let skipReason = null;
+        if (skipBindgen) {
+            skipReason = "skipBindgen";
+        }
+        else if (manifestPath === null) {
+            skipReason = "no manifestPath";
+        }
+        if (skipReason !== null) {
+            if (verbose) {
+                console.info(`skip locating source wasm of ${targetId} (${skipReason})`);
+            }
+            return null;
+        }
+        let command = "cargo";
+        let commandArgs = [];
+        commandArgs.push("metadata", "--no-deps");
+        commandArgs.push("--manifest-path", manifestPath);
+        commandArgs.push("--format-version", "1");
+        let metadata = null;
+        try {
+            if (verbose) {
+                console.info(`locating input wasm of ${targetId}`);
+            }
+            const { stdout } = yield promisify(execFile)(command, commandArgs);
+            metadata = JSON.parse(stdout);
+        }
+        catch (error) {
+            logger.error(`reading cargo metadata of ${targetId} failed`);
+            return null;
+        }
+        const targetDirectory = metadata["target_directory"];
+        const packages = metadata["packages"];
+        let crateName = null;
+        if (givenCrateName !== null) {
+            crateName = givenCrateName;
+        }
+        else if (packages && packages.length == 1) {
+            const package_ = packages[0];
+            crateName = package_.name;
+        }
+        else {
+            logger.error(`packages in cargo metadata of ${targetId} isn't single (explicit crateName is required)`);
+            return null;
+        }
+        if (targetDirectory === null || crateName === null) {
+            logger.error(`target directory or crate name of ${targetId} is missing`);
+            return null;
+        }
+        let profileDirectory;
+        if (profile == 'dev' || profile == 'test') {
+            profileDirectory = 'debug';
+        }
+        else if (profile == 'bench') {
+            profileDirectory = 'release';
+        }
+        else {
+            // as-is (including release)
+            profileDirectory = profile;
+        }
+        const inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, '_') + ".wasm");
+        if (verbose) {
+            logger.info(` => ${inputWasmPath}`);
+        }
+        return inputWasmPath;
+    });
+}
+function execWasmBindgen(args) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const targetId = args.targetId;
+        const skipBindgen = args.skipBindgen;
+        const inputWasmPath = args.inputWasmPath;
+        const outputDir = args.outputDir;
+        const outputName = args.outputName;
+        const logger = args.logger;
+        const verbose = args.verbose;
+        let skipReason = null;
+        if (skipBindgen) {
+            skipReason = "skipBindgen";
+        }
+        if (skipReason !== null) {
+            if (verbose) {
+                logger.info(`skip wasm-bindgen of ${targetId} (${skipReason})`);
+            }
+            return true;
+        }
+        let command = "wasm-bindgen";
+        let commandArgs = [];
+        commandArgs.push("--out-dir", outputDir);
+        commandArgs.push("--out-name", outputName);
+        commandArgs.push("--target", "bundler");
+        commandArgs.push(inputWasmPath);
+        try {
+            if (verbose) {
+                const joinedArgs = commandArgs.join(" ");
+                logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
+            }
+            yield promisify(execFile)(command, commandArgs);
+        }
+        catch (error) {
+            logger.error(`bindgen ${targetId} failed`);
+            return false;
+        }
+        return true;
+    });
+}
+
+class WasmManager {
+    constructor(options) {
+        var _a, _b, _c, _d;
+        this.suppressError = false;
+        // config
+        this.logger = null;
+        this.pathRoot = null;
+        this.isProduction = false;
+        this.verbose = (_a = options.verbose) !== null && _a !== void 0 ? _a : false;
+        this.suppressError = (_b = options.suppressError) !== null && _b !== void 0 ? _b : false;
+        this.syncImport = (_c = options.syncImport) !== null && _c !== void 0 ? _c : false;
+        // targets
+        const targetOptions = (_d = options.targets) !== null && _d !== void 0 ? _d : {};
+        this.targets = [];
+        for (const targetId in targetOptions) {
+            const target = new WasmTarget(targetId, targetOptions[targetId]);
+            this.targets.push(target);
+        }
+    }
+    applyConfig(config) {
+        var _a;
+        this.logger = (_a = config.customLogger) !== null && _a !== void 0 ? _a : config.logger;
+        this.pathRoot = config.root;
+        this.isProduction = config.isProduction;
+    }
+    buildAll() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = {
+                verbose: this.verbose,
+                isProduction: this.isProduction,
+                logger: this.logger,
+                pathRoot: this.pathRoot,
+                suppressError: this.suppressError,
+            };
+            for (const target of this.targets) {
+                yield target.build(args);
+            }
+        });
+    }
+    loadWasmAsProxyCode(wasmPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const wasmData = yield WasmData.create(wasmPath);
+            return wasmData.generateProxyCode(this.syncImport);
+        });
+    }
+}
+class WasmTarget {
+    constructor(id, options) {
+        var _a, _b, _c, _d, _e, _f, _g;
+        if (typeof options === 'string') {
+            options = { manifestPath: options };
+        }
+        this.id = id;
+        this.manifestPath = (_a = options.manifestPath) !== null && _a !== void 0 ? _a : null;
+        this.skipBuild = (_b = options.skipBuild) !== null && _b !== void 0 ? _b : false;
+        this.buildProfile = (_c = options.buildProfile) !== null && _c !== void 0 ? _c : null;
+        this.ignoreBuildError = (_d = options.ignoreBuildError) !== null && _d !== void 0 ? _d : false;
+        this.crateName = (_e = options.crateName) !== null && _e !== void 0 ? _e : null;
+        this.skipBindgen = (_f = options.skipBindgen) !== null && _f !== void 0 ? _f : false;
+        this.inputWasmPath = (_g = options.inputWasmPath) !== null && _g !== void 0 ? _g : null;
+    }
+    build(args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            (yield this.buildInputWasm(args)) &&
+                (yield this.locateInputWasm(args)) &&
+                (yield this.bindgen(args));
+        });
+    }
+    buildInputWasm(args) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? 'release' : 'dev');
+            return yield execCargoBuildWasm({
+                targetId: this.id,
+                skipBuild: this.skipBuild,
+                manifestPath: this.manifestPath,
+                profile,
+                ignoreError: this.ignoreBuildError,
+                logger: args.logger,
+                verbose: args.verbose,
+                suppressError: args.suppressError,
+            });
+        });
+    }
+    locateInputWasm(args) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.inputWasmPath !== null) {
+                return true;
+            }
+            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? 'release' : 'dev');
+            this.inputWasmPath = yield execCargoMetadata({
+                targetId: this.id,
+                skipBindgen: this.skipBindgen,
+                manifestPath: this.manifestPath,
+                crateName: this.crateName,
+                profile,
+                logger: args.logger,
+                verbose: args.verbose,
+            });
+            return this.inputWasmPath !== null;
+        });
+    }
+    bindgen(args) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.inputWasmPath === null) {
+                return false;
+            }
+            const targetPath = path.join(args.pathRoot, this.id);
+            const outputDir = path.dirname(targetPath);
+            const outputName = path.basename(targetPath, '.wasm');
+            return execWasmBindgen({
+                targetId: this.id,
+                skipBindgen: this.skipBindgen,
+                inputWasmPath: this.inputWasmPath,
+                outputDir,
+                outputName,
+                logger: args.logger,
+                verbose: args.verbose,
+            });
+        });
+    }
+}
+
 const PLUGIN_NAME = "rs-wasm-bindgen";
 function rsWasmBindgen(options) {
-    var _a, _b, _c;
-    options = options !== null && options !== void 0 ? options : {};
-    let verbose = (_a = options.verbose) !== null && _a !== void 0 ? _a : false;
-    let syncImport = (_b = options.syncImport) !== null && _b !== void 0 ? _b : false;
-    let wasmMetaOptionsMap = (_c = options.wasmMeta) !== null && _c !== void 0 ? _c : {};
-    let root = null;
-    let release = false;
-    let wasmMetaList = [];
+    const wasmManager = new WasmManager(options !== null && options !== void 0 ? options : {});
     return {
         name: PLUGIN_NAME,
+        wasmManager,
         configResolved(config) {
-            root = config.root;
-            release = config.isProduction;
-            for (let id in wasmMetaOptionsMap) {
-                const wasmMetaOptions = wasmMetaOptionsMap[id];
-                const wasmMeta = createWasmMetaFromOptions(root, id, wasmMetaOptions);
-                wasmMetaList.push(wasmMeta);
-            }
+            wasmManager.applyConfig(config);
         },
         buildStart(_inputOptions) {
             return __awaiter(this, void 0, void 0, function* () {
-                let context = this;
-                let opts = { verbose, release };
-                for (let wasmMeta of wasmMetaList) {
-                    yield execCargoBuildWasm(context, wasmMeta, opts);
-                    yield execCargoMetadata(context, wasmMeta, opts);
-                    yield execWasmBindgen(context, wasmMeta, opts);
-                }
+                return wasmManager.buildAll();
             });
         },
         load(id) {
@@ -308,8 +417,8 @@ function rsWasmBindgen(options) {
                 if (!/\.wasm$/i.test(id)) {
                     return null;
                 }
-                const wasmData = yield WasmData.create(id);
-                return wasmData.generateProxyCode(syncImport);
+                this.addWatchFile(id);
+                return wasmManager.loadWasmAsProxyCode(id);
             });
         },
     };

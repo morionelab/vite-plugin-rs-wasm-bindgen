@@ -1,13 +1,16 @@
 import { Plugin } from "vite";
 type Options = {
     verbose?: boolean;
+    suppressError?: boolean;
     syncImport?: boolean;
-    wasmMeta?: Record<string, WasmMetaOptions>;
+    targets?: Record<string, TargetOptions>;
 };
-type WasmMetaOptions = string | {
+type TargetOptions = string | {
     manifestPath?: string;
     skipBuild?: boolean;
     buildProfile?: string;
+    ignoreBuildError?: boolean;
+    crateName?: string;
     skipBindgen?: boolean;
     inputWasmPath?: string;
 };

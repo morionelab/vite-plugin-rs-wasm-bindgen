@@ -1,0 +1,155 @@
+import { type LoadResult } from "rollup";
+import { type ResolvedConfig, type Logger } from "vite";
+import * as path from "node:path";
+
+import { type Options, type TargetOptions } from "./options";
+import { WasmData } from "./wasmlib";
+import { execCargoBuildWasm, execCargoMetadata, execWasmBindgen } from "./cmds";
+
+export class WasmManager {
+  // options
+  private verbose: boolean;
+  private suppressError: boolean = false;
+  private syncImport: boolean;
+  private targets: Array<WasmTarget>;
+
+  // config
+  private logger: Logger | null = null;
+  private pathRoot: string | null = null;
+  private isProduction: boolean = false;
+
+  constructor(options: Options) {
+    this.verbose = options.verbose ?? false;
+    this.suppressError = options.suppressError ?? false;
+    this.syncImport = options.syncImport ?? false;
+
+    // targets
+    const targetOptions = options.targets ?? {};
+    this.targets = [];
+    for (const targetId in targetOptions) {
+      const target = new WasmTarget(targetId, targetOptions[targetId]);
+      this.targets.push(target);
+    }
+  }
+
+  applyConfig(config: ResolvedConfig) {
+    this.logger = config.customLogger ?? config.logger;
+    this.pathRoot = config.root;
+    this.isProduction = config.isProduction;
+  }
+
+  async buildAll() {
+    const args = {
+      verbose: this.verbose,
+      isProduction: this.isProduction,
+      logger: this.logger!,
+      pathRoot: this.pathRoot!,
+      suppressError: this.suppressError,
+    };
+
+    for (const target of this.targets) {
+      await target.build(args);
+    }
+  }
+
+  async loadWasmAsProxyCode(wasmPath: string): Promise<LoadResult> {
+    const wasmData = await WasmData.create(wasmPath);
+    return wasmData.generateProxyCode(this.syncImport);
+  }
+}
+
+type WasmTargetBuildArgs = {
+  logger: Logger,
+  verbose: boolean,
+  isProduction: boolean,
+  pathRoot: string,
+  suppressError: boolean,
+}
+
+class WasmTarget {
+  private id: string;
+  private manifestPath: null | string;
+  private skipBuild: boolean;
+  private buildProfile: null | string;
+  private ignoreBuildError: boolean;
+  private crateName: null | string;
+  private skipBindgen: boolean;
+
+  private inputWasmPath: null | string;
+
+  constructor(id: string, options: TargetOptions) {
+    if (typeof options === 'string') {
+      options = { manifestPath: options };
+    }
+
+    this.id = id;
+    this.manifestPath = options.manifestPath ?? null;
+    this.skipBuild = options.skipBuild ?? false;
+    this.buildProfile = options.buildProfile ?? null;
+    this.ignoreBuildError = options.ignoreBuildError ?? false;
+    this.crateName = options.crateName ?? null;
+    this.skipBindgen = options.skipBindgen ?? false;
+    this.inputWasmPath = options.inputWasmPath ?? null;
+  }
+
+  async build(args: WasmTargetBuildArgs) {
+    await this.buildInputWasm(args) &&
+      await this.locateInputWasm(args) &&
+      await this.bindgen(args);
+  }
+
+  private async buildInputWasm(args: WasmTargetBuildArgs): Promise<boolean> {
+    const profile = this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+
+    return await execCargoBuildWasm({
+      targetId: this.id,
+      skipBuild: this.skipBuild,
+      manifestPath: this.manifestPath,
+      profile,
+      ignoreError: this.ignoreBuildError,
+      logger: args.logger,
+      verbose: args.verbose,
+      suppressError: args.suppressError,
+    });
+  }
+
+  private async locateInputWasm(args: WasmTargetBuildArgs): Promise<boolean> {
+    if (this.inputWasmPath !== null) {
+      return true;
+    }
+
+    const profile = this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+
+    this.inputWasmPath = await execCargoMetadata({
+      targetId: this.id,
+      skipBindgen: this.skipBindgen,
+      manifestPath: this.manifestPath,
+      crateName: this.crateName,
+      profile,
+      logger: args.logger,
+      verbose: args.verbose,
+    });
+
+    return this.inputWasmPath !== null;
+  }
+
+  private async bindgen(args: WasmTargetBuildArgs): Promise<boolean> {
+    if (this.inputWasmPath === null) {
+      return false;
+    }
+
+    const targetPath = path.join(args.pathRoot, this.id);
+    const outputDir = path.dirname(targetPath);
+    const outputName = path.basename(targetPath, '.wasm');
+
+    return execWasmBindgen({
+      targetId: this.id,
+      skipBindgen: this.skipBindgen,
+      inputWasmPath: this.inputWasmPath,
+      outputDir,
+      outputName,
+      logger: args.logger,
+      verbose: args.verbose,
+    });
+  }
+}
