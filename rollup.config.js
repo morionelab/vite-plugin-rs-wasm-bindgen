@@ -18,7 +18,7 @@ export default [
         ],
     },
     {
-        input: "src/cli-update-wasm.ts",
+        input: "src/cli-wasm-bindgen.ts",
         output: {
             dir: "dist",
             format: "esm",
