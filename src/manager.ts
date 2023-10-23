@@ -52,6 +52,17 @@ export class WasmManager {
     }
   }
 
+  isTargetWasmId(id: string): boolean {
+    if (/\.wasm$/i.test(id)) {
+      const dir = path.dirname(id);
+      const file = path.basename(id);
+
+      return this.targets.some((target) => target.match(dir, file));
+    }
+
+    return false;
+  }
+
   async loadWasmAsProxyCode(wasmPath: string): Promise<LoadResult> {
     const wasmData = await WasmData.create(wasmPath);
     return wasmData.generateProxyCode(this.syncImport);
@@ -76,6 +87,8 @@ class WasmTarget {
   private skipBindgen: boolean;
 
   private inputWasmPath: null | string;
+  private outputDir: null | string;
+  private outputName: null | string;
 
   constructor(id: string, options: TargetOptions) {
     if (typeof options === 'string') {
@@ -90,6 +103,8 @@ class WasmTarget {
     this.crateName = options.crateName ?? null;
     this.skipBindgen = options.skipBindgen ?? false;
     this.inputWasmPath = options.inputWasmPath ?? null;
+    this.outputDir = null;
+    this.outputName = null;
   }
 
   async build(args: WasmTargetBuildArgs) {
@@ -138,11 +153,11 @@ class WasmTarget {
       return false;
     }
 
-    const targetPath = path.join(args.pathRoot, this.id);
-    const outputDir = path.dirname(targetPath);
-    const outputName = path.basename(targetPath, '.wasm');
+    const targetPathPrefix = path.join(args.pathRoot, this.id);
+    const outputDir = path.dirname(targetPathPrefix);
+    const outputName = path.basename(targetPathPrefix);
 
-    return execWasmBindgen({
+    const ok = await execWasmBindgen({
       targetId: this.id,
       skipBindgen: this.skipBindgen,
       inputWasmPath: this.inputWasmPath,
@@ -151,5 +166,20 @@ class WasmTarget {
       logger: args.logger,
       verbose: args.verbose,
     });
+
+    if (ok) {
+      this.outputDir = outputDir;
+      this.outputName = outputName;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  match(dir: string, name: string): boolean {
+    if (this.outputDir === null || this.outputName === null) {
+      return false;
+    }
+    return path.relative(this.outputDir, dir) == '' && name.startsWith(this.outputName);
   }
 }

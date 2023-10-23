@@ -21,7 +21,7 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     },
 
     async load(id: string) {
-      if (!/\.wasm$/i.test(id)) {
+      if (!wasmManager.isTargetWasmId(id)) {
         return null;
       }
 
