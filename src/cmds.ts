@@ -124,7 +124,7 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
   let metadata: any = null;
   try {
     if (verbose) {
-      console.info(`locating input wasm of ${targetId}`);
+      console.info(`resloving input wasm of ${targetId}`);
     }
     const { stdout } = await promisify(execFile)(command, commandArgs);
     metadata = JSON.parse(stdout);
@@ -143,7 +143,7 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
     const package_ = packages[0];
     crateName = package_.name as string;
   } else {
-    logger.error(`packages in cargo metadata of ${targetId} isn't single (explicit crateName is required)`);
+    logger.error(`packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`);
     return null;
   }
 
