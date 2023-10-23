@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { resolveConfig } from 'vite';
+'use strict';
+
+var vite = require('vite');
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -38,7 +40,7 @@ function main() {
     return __awaiter(this, void 0, void 0, function* () {
         const command = 'serve';
         const mode = 'development';
-        const config = yield resolveConfig({}, command, mode);
+        const config = yield vite.resolveConfig({}, command, mode);
         if (!config) {
             console.error(`failed in resolving vite config`);
             return;

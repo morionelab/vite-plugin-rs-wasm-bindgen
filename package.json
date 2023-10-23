@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-rs-wasm-bindgen",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "vite plugin for bundling the wasm-bindgen output",
   "keywords": [
     "vite-plugin",
@@ -14,7 +14,6 @@
   "files": [
     "dist"
   ],
-  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "vite-wasm-bindgen": "dist/cli-wasm-bindgen.js"

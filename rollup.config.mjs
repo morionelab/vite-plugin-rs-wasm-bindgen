@@ -7,7 +7,7 @@ export default [
         input: "src/index.ts",
         output: {
             dir: "dist",
-            format: "esm",
+            format: "cjs",
             exports: "default",
         },
         external: [
@@ -21,7 +21,7 @@ export default [
         input: "src/cli-wasm-bindgen.ts",
         output: {
             dir: "dist",
-            format: "esm",
+            format: "cjs",
             exports: "none",
             banner: NODE_SHEBANG,
         },

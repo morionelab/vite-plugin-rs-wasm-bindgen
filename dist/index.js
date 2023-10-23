@@ -1,7 +1,29 @@
-import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
-import { promisify } from 'node:util';
-import { execFile } from 'node:child_process';
+'use strict';
+
+var path = require('node:path');
+var fs = require('node:fs/promises');
+var node_util = require('node:util');
+var node_child_process = require('node:child_process');
+
+function _interopNamespaceDefault(e) {
+    var n = Object.create(null);
+    if (e) {
+        Object.keys(e).forEach(function (k) {
+            if (k !== 'default') {
+                var d = Object.getOwnPropertyDescriptor(e, k);
+                Object.defineProperty(n, k, d.get ? d : {
+                    enumerable: true,
+                    get: function () { return e[k]; }
+                });
+            }
+        });
+    }
+    n.default = e;
+    return Object.freeze(n);
+}
+
+var path__namespace = /*#__PURE__*/_interopNamespaceDefault(path);
+var fs__namespace = /*#__PURE__*/_interopNamespaceDefault(fs);
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -43,8 +65,8 @@ class WasmData {
     }
     static create(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
-            const fileName = path.basename(wasmPath);
-            const buffer = yield fs.readFile(wasmPath);
+            const fileName = path__namespace.basename(wasmPath);
+            const buffer = yield fs__namespace.readFile(wasmPath);
             const wasm = yield WebAssembly.compile(buffer);
             const importModules = Array.from(new Set(WebAssembly.Module.imports(wasm).map(desc => desc.module)).keys());
             const exportNames = Array.from(new Set(WebAssembly.Module.exports(wasm).map(desc => desc.name)).keys());
@@ -146,7 +168,7 @@ function execCargoBuildWasm(args) {
                 const joinedArgs = commandArgs.join(" ");
                 logger.info(`building source wasm of ${targetId}: ${command} ${joinedArgs}`);
             }
-            yield promisify(execFile)(command, commandArgs);
+            yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
         }
         catch (error) {
             const ignored = ignoreError ? " (ignored)" : "";
@@ -189,9 +211,9 @@ function execCargoMetadata(args) {
         let metadata = null;
         try {
             if (verbose) {
-                console.info(`locating input wasm of ${targetId}`);
+                console.info(`resloving input wasm of ${targetId}`);
             }
-            const { stdout } = yield promisify(execFile)(command, commandArgs);
+            const { stdout } = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
             metadata = JSON.parse(stdout);
         }
         catch (error) {
@@ -209,7 +231,7 @@ function execCargoMetadata(args) {
             crateName = package_.name;
         }
         else {
-            logger.error(`packages in cargo metadata of ${targetId} isn't single (explicit crateName is required)`);
+            logger.error(`packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`);
             return null;
         }
         if (targetDirectory === null || crateName === null) {
@@ -227,7 +249,7 @@ function execCargoMetadata(args) {
             // as-is (including release)
             profileDirectory = profile;
         }
-        const inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, '_') + ".wasm");
+        const inputWasmPath = path__namespace.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, '_') + ".wasm");
         if (verbose) {
             logger.info(` => ${inputWasmPath}`);
         }
@@ -264,7 +286,7 @@ function execWasmBindgen(args) {
                 const joinedArgs = commandArgs.join(" ");
                 logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
             }
-            yield promisify(execFile)(command, commandArgs);
+            yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
         }
         catch (error) {
             logger.error(`bindgen ${targetId} failed`);
@@ -313,6 +335,14 @@ class WasmManager {
             }
         });
     }
+    isTargetWasmId(id) {
+        if (/\.wasm$/i.test(id)) {
+            const dir = path__namespace.dirname(id);
+            const file = path__namespace.basename(id);
+            return this.targets.some((target) => target.match(dir, file));
+        }
+        return false;
+    }
     loadWasmAsProxyCode(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
             const wasmData = yield WasmData.create(wasmPath);
@@ -334,6 +364,8 @@ class WasmTarget {
         this.crateName = (_e = options.crateName) !== null && _e !== void 0 ? _e : null;
         this.skipBindgen = (_f = options.skipBindgen) !== null && _f !== void 0 ? _f : false;
         this.inputWasmPath = (_g = options.inputWasmPath) !== null && _g !== void 0 ? _g : null;
+        this.outputDir = null;
+        this.outputName = null;
     }
     build(args) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -382,10 +414,10 @@ class WasmTarget {
             if (this.inputWasmPath === null) {
                 return false;
             }
-            const targetPath = path.join(args.pathRoot, this.id);
-            const outputDir = path.dirname(targetPath);
-            const outputName = path.basename(targetPath, '.wasm');
-            return execWasmBindgen({
+            const targetPathPrefix = path__namespace.join(args.pathRoot, this.id);
+            const outputDir = path__namespace.dirname(targetPathPrefix);
+            const outputName = path__namespace.basename(targetPathPrefix);
+            const ok = yield execWasmBindgen({
                 targetId: this.id,
                 skipBindgen: this.skipBindgen,
                 inputWasmPath: this.inputWasmPath,
@@ -394,7 +426,21 @@ class WasmTarget {
                 logger: args.logger,
                 verbose: args.verbose,
             });
+            if (ok) {
+                this.outputDir = outputDir;
+                this.outputName = outputName;
+                return true;
+            }
+            else {
+                return false;
+            }
         });
+    }
+    match(dir, name) {
+        if (this.outputDir === null || this.outputName === null) {
+            return false;
+        }
+        return path__namespace.relative(this.outputDir, dir) == '' && name.startsWith(this.outputName);
     }
 }
 
@@ -414,7 +460,7 @@ function rsWasmBindgen(options) {
         },
         load(id) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (!/\.wasm$/i.test(id)) {
+                if (!wasmManager.isTargetWasmId(id)) {
                     return null;
                 }
                 this.addWatchFile(id);
@@ -424,4 +470,4 @@ function rsWasmBindgen(options) {
     };
 }
 
-export { rsWasmBindgen as default };
+module.exports = rsWasmBindgen;
