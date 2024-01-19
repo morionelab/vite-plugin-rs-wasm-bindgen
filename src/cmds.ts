@@ -1,23 +1,25 @@
-import * as path from "node:path";
-import { promisify } from "node:util";
-import { execFile } from "node:child_process";
-import { Logger } from "vite";
+import * as path from 'node:path';
+import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
+import { Logger } from 'vite';
 
 //
 // cargo build
 //
 type CargoBuildWasmArgs = {
-  targetId: string,
-  skipBuild: boolean,
-  manifestPath: null | string,
-  profile: string,
-  ignoreError: boolean,
-  logger: Logger,
-  verbose: boolean,
-  suppressError: boolean,
+  targetId: string;
+  skipBuild: boolean;
+  manifestPath: null | string;
+  profile: string;
+  ignoreError: boolean;
+  logger: Logger;
+  verbose: boolean;
+  suppressError: boolean;
 };
 
-export async function execCargoBuildWasm(args: CargoBuildWasmArgs): Promise<boolean> {
+export async function execCargoBuildWasm(
+  args: CargoBuildWasmArgs,
+): Promise<boolean> {
   const logger = args.logger;
   const verbose = args.verbose;
   const suppressError = args.suppressError;
@@ -30,9 +32,9 @@ export async function execCargoBuildWasm(args: CargoBuildWasmArgs): Promise<bool
   let skipReason: null | string = null;
 
   if (skipBuild) {
-    skipReason = "skipBuild";
+    skipReason = 'skipBuild';
   } else if (manifestPath === null) {
-    skipReason = "no manifestPath";
+    skipReason = 'no manifestPath';
   }
 
   if (skipReason !== null) {
@@ -42,29 +44,31 @@ export async function execCargoBuildWasm(args: CargoBuildWasmArgs): Promise<bool
     return true;
   }
 
-  let command = "cargo";
-  let commandArgs: Array<string> = [];
+  const command = 'cargo';
+  const commandArgs: Array<string> = [];
 
-  commandArgs.push("build", "--lib");
-  commandArgs.push("--manifest-path", manifestPath!);
-  commandArgs.push("--target", "wasm32-unknown-unknown");
+  commandArgs.push('build', '--lib');
+  commandArgs.push('--manifest-path', manifestPath!);
+  commandArgs.push('--target', 'wasm32-unknown-unknown');
 
   if (profile == 'release') {
-    commandArgs.push("--release");
+    commandArgs.push('--release');
   } else if (profile != 'dev') {
-    commandArgs.push("--profile");
+    commandArgs.push('--profile');
     commandArgs.push(profile);
   }
 
   try {
     if (verbose) {
-      const joinedArgs = commandArgs.join(" ");
-      logger.info(`building source wasm of ${targetId}: ${command} ${joinedArgs}`);
+      const joinedArgs = commandArgs.join(' ');
+      logger.info(
+        `building source wasm of ${targetId}: ${command} ${joinedArgs}`,
+      );
     }
     await promisify(execFile)(command, commandArgs);
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
-    const ignored = ignoreError ? " (ignored)" : "";
+    const ignored = ignoreError ? ' (ignored)' : '';
     logger.error(`building source wasm of ${targetId} failed${ignored}`);
 
     if (!suppressError) {
@@ -80,16 +84,18 @@ export async function execCargoBuildWasm(args: CargoBuildWasmArgs): Promise<bool
 // cargo metadata
 //
 type CargoMetadataArgs = {
-  targetId: string,
-  skipBindgen: boolean,
-  manifestPath: null | string,
-  crateName: null | string,
-  profile: string,
-  logger: Logger,
-  verbose: boolean,
+  targetId: string;
+  skipBindgen: boolean;
+  manifestPath: null | string;
+  crateName: null | string;
+  profile: string;
+  logger: Logger;
+  verbose: boolean;
 };
 
-export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null | string> {
+export async function execCargoMetadata(
+  args: CargoMetadataArgs,
+): Promise<null | string> {
   const targetId = args.targetId;
   const skipBindgen = args.skipBindgen;
   const manifestPath = args.manifestPath;
@@ -101,26 +107,25 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
   let skipReason: null | string = null;
 
   if (skipBindgen) {
-    skipReason = "skipBindgen";
+    skipReason = 'skipBindgen';
   } else if (manifestPath === null) {
-    skipReason = "no manifestPath";
+    skipReason = 'no manifestPath';
   }
 
   if (skipReason !== null) {
     if (verbose) {
-      console.info(
-        `skip locating source wasm of ${targetId} (${skipReason})`
-      );
+      console.info(`skip locating source wasm of ${targetId} (${skipReason})`);
     }
     return null;
   }
 
-  let command = "cargo";
-  let commandArgs: Array<string> = [];
-  commandArgs.push("metadata", "--no-deps");
-  commandArgs.push("--manifest-path", manifestPath!);
-  commandArgs.push("--format-version", "1");
+  const command = 'cargo';
+  const commandArgs: Array<string> = [];
+  commandArgs.push('metadata', '--no-deps');
+  commandArgs.push('--manifest-path', manifestPath!);
+  commandArgs.push('--format-version', '1');
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let metadata: any = null;
   try {
     if (verbose) {
@@ -133,8 +138,8 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
     return null;
   }
 
-  const targetDirectory = metadata["target_directory"] as string;
-  const packages = metadata["packages"];
+  const targetDirectory = metadata['target_directory'] as string;
+  const packages = metadata['packages'];
 
   let crateName: null | string = null;
   if (givenCrateName !== null) {
@@ -143,7 +148,9 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
     const package_ = packages[0];
     crateName = package_.name as string;
   } else {
-    logger.error(`packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`);
+    logger.error(
+      `packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`,
+    );
     return null;
   }
 
@@ -164,9 +171,9 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
 
   const inputWasmPath = path.join(
     targetDirectory,
-    "wasm32-unknown-unknown",
+    'wasm32-unknown-unknown',
     profileDirectory,
-    crateName.replace(/-/g, '_') + ".wasm"
+    crateName.replace(/-/g, '_') + '.wasm',
   );
 
   if (verbose) {
@@ -179,13 +186,13 @@ export async function execCargoMetadata(args: CargoMetadataArgs): Promise<null |
 // wasm-bindgen
 //
 type WasmBindgenArgs = {
-  targetId: string,
-  skipBindgen: boolean,
-  inputWasmPath: string,
-  outputDir: string,
-  outputName: string,
-  logger: Logger,
-  verbose: boolean,
+  targetId: string;
+  skipBindgen: boolean;
+  inputWasmPath: string;
+  outputDir: string;
+  outputName: string;
+  logger: Logger;
+  verbose: boolean;
 };
 
 export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
@@ -200,7 +207,7 @@ export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
   let skipReason: null | string = null;
 
   if (skipBindgen) {
-    skipReason = "skipBindgen";
+    skipReason = 'skipBindgen';
   }
 
   if (skipReason !== null) {
@@ -210,17 +217,17 @@ export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
     return true;
   }
 
-  let command = "wasm-bindgen";
-  let commandArgs: Array<string> = [];
+  const command = 'wasm-bindgen';
+  const commandArgs: Array<string> = [];
 
-  commandArgs.push("--out-dir", outputDir);
-  commandArgs.push("--out-name", outputName);
-  commandArgs.push("--target", "bundler");
+  commandArgs.push('--out-dir', outputDir);
+  commandArgs.push('--out-name', outputName);
+  commandArgs.push('--target', 'bundler');
   commandArgs.push(inputWasmPath);
 
   try {
     if (verbose) {
-      const joinedArgs = commandArgs.join(" ");
+      const joinedArgs = commandArgs.join(' ');
       logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
     }
     await promisify(execFile)(command, commandArgs);

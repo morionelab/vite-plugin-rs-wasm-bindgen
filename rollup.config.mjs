@@ -1,7 +1,5 @@
 import ts from "rollup-plugin-ts";
 
-const NODE_SHEBANG = "#!/usr/bin/env node";
-
 export default [
     {
         input: "src/index.ts",
@@ -17,19 +15,4 @@ export default [
             ts(),
         ],
     },
-    {
-        input: "src/cli-wasm-bindgen.ts",
-        output: {
-            dir: "dist",
-            format: "cjs",
-            exports: "none",
-            banner: NODE_SHEBANG,
-        },
-        external: [
-            /^node:/, 'vite'
-        ],
-        plugins: [
-            ts(),
-        ],
-    }
 ];

@@ -1,4 +1,4 @@
-import { Plugin } from "vite";
+import { Plugin } from 'vite';
 type Options = {
     verbose?: boolean;
     suppressError?: boolean;

@@ -1,10 +1,9 @@
-import { type LoadResult } from "rollup";
-import { type ResolvedConfig, type Logger } from "vite";
-import * as path from "node:path";
+import { type ResolvedConfig, type Logger } from 'vite';
+import * as path from 'node:path';
 
-import { type Options, type TargetOptions } from "./options";
-import { WasmData } from "./wasmlib";
-import { execCargoBuildWasm, execCargoMetadata, execWasmBindgen } from "./cmds";
+import { type Options, type TargetOptions } from './options';
+import { WasmData } from './wasmlib';
+import { execCargoBuildWasm, execCargoMetadata, execWasmBindgen } from './cmds';
 
 export class WasmManager {
   // options
@@ -52,6 +51,38 @@ export class WasmManager {
     }
   }
 
+  listWatchWasmPath(): Array<string> {
+    const list = [];
+    for (const target of this.targets) {
+      const watchWasmPath = target.getWatchWasmPath();
+      if (watchWasmPath != null) {
+        list.push(watchWasmPath);
+      }
+    }
+    return list;
+  }
+
+  async handleWasmChange(watchWasmPath: string) {
+    const targets = this.targets.filter(
+      (target) => target.getWatchWasmPath() == watchWasmPath,
+    );
+    if (targets.length == 0) {
+      return;
+    }
+
+    const args = {
+      verbose: this.verbose,
+      isProduction: this.isProduction,
+      logger: this.logger!,
+      pathRoot: this.pathRoot!,
+      suppressError: this.suppressError,
+    };
+
+    for (const target of targets) {
+      await target.bindgen(args);
+    }
+  }
+
   isTargetWasmId(id: string): boolean {
     if (/\.wasm$/i.test(id)) {
       const dir = path.dirname(id);
@@ -63,19 +94,19 @@ export class WasmManager {
     return false;
   }
 
-  async loadWasmAsProxyCode(wasmPath: string): Promise<LoadResult> {
+  async loadWasmAsProxyCode(wasmPath: string): Promise<string> {
     const wasmData = await WasmData.create(wasmPath);
     return wasmData.generateProxyCode(this.syncImport);
   }
 }
 
 type WasmTargetBuildArgs = {
-  logger: Logger,
-  verbose: boolean,
-  isProduction: boolean,
-  pathRoot: string,
-  suppressError: boolean,
-}
+  logger: Logger;
+  verbose: boolean;
+  isProduction: boolean;
+  pathRoot: string;
+  suppressError: boolean;
+};
 
 class WasmTarget {
   private id: string;
@@ -87,6 +118,7 @@ class WasmTarget {
   private skipBindgen: boolean;
 
   private inputWasmPath: null | string;
+  private watchWasmPath: null | string;
   private outputDir: null | string;
   private outputName: null | string;
 
@@ -103,23 +135,35 @@ class WasmTarget {
     this.crateName = options.crateName ?? null;
     this.skipBindgen = options.skipBindgen ?? false;
     this.inputWasmPath = options.inputWasmPath ?? null;
+    this.watchWasmPath = null;
+    this.syncWatchWasmPath();
     this.outputDir = null;
     this.outputName = null;
   }
 
   async build(args: WasmTargetBuildArgs) {
-    await this.buildInputWasm(args) &&
-      await this.locateInputWasm(args) &&
-      await this.bindgen(args);
+    if (!(await this.buildInputWasm(args))) {
+      return;
+    }
+    if (!(await this.locateInputWasm(args))) {
+      return;
+    }
+    if (!(await this.bindgen(args))) {
+      return;
+    }
   }
 
   private async buildInputWasm(args: WasmTargetBuildArgs): Promise<boolean> {
-    const profile = this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+    const profile =
+      this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+    const manifestPath = this.manifestPath
+      ? path.join(args.pathRoot, this.manifestPath)
+      : null;
 
     return await execCargoBuildWasm({
       targetId: this.id,
       skipBuild: this.skipBuild,
-      manifestPath: this.manifestPath,
+      manifestPath,
       profile,
       ignoreError: this.ignoreBuildError,
       logger: args.logger,
@@ -133,22 +177,28 @@ class WasmTarget {
       return true;
     }
 
-    const profile = this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+    const profile =
+      this.buildProfile ?? (args.isProduction ? 'release' : 'dev');
+    const manifestPath = this.manifestPath
+      ? path.join(args.pathRoot, this.manifestPath)
+      : null;
 
     this.inputWasmPath = await execCargoMetadata({
       targetId: this.id,
       skipBindgen: this.skipBindgen,
-      manifestPath: this.manifestPath,
+      manifestPath,
       crateName: this.crateName,
       profile,
       logger: args.logger,
       verbose: args.verbose,
     });
 
+    this.syncWatchWasmPath();
+
     return this.inputWasmPath !== null;
   }
 
-  private async bindgen(args: WasmTargetBuildArgs): Promise<boolean> {
+  async bindgen(args: WasmTargetBuildArgs): Promise<boolean> {
     if (this.inputWasmPath === null) {
       return false;
     }
@@ -180,6 +230,22 @@ class WasmTarget {
     if (this.outputDir === null || this.outputName === null) {
       return false;
     }
-    return path.relative(this.outputDir, dir) == '' && name.startsWith(this.outputName);
+    return (
+      path.relative(this.outputDir, dir) == '' &&
+      name.startsWith(this.outputName)
+    );
+  }
+
+  private syncWatchWasmPath() {
+    if (this.inputWasmPath == null) {
+      this.watchWasmPath = null;
+    } else {
+      const components = path.normalize(this.inputWasmPath).split(path.sep);
+      this.watchWasmPath = components.join('/');
+    }
+  }
+
+  getWatchWasmPath(): null | string {
+    return this.watchWasmPath;
   }
 }
