@@ -13,6 +13,7 @@ type TargetOptions = string | {
     crateName?: string;
     skipBindgen?: boolean;
     inputWasmPath?: string;
+    watchInputWasm?: boolean;
 };
 declare function rsWasmBindgen(options?: Options): Plugin;
 export { rsWasmBindgen as default };

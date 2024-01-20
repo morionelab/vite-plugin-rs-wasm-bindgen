@@ -116,6 +116,7 @@ class WasmTarget {
   private ignoreBuildError: boolean;
   private crateName: null | string;
   private skipBindgen: boolean;
+  private watchInputWasm: boolean;
 
   private inputWasmPath: null | string;
   private watchWasmPath: null | string;
@@ -134,6 +135,7 @@ class WasmTarget {
     this.ignoreBuildError = options.ignoreBuildError ?? false;
     this.crateName = options.crateName ?? null;
     this.skipBindgen = options.skipBindgen ?? false;
+    this.watchInputWasm = options.watchInputWasm ?? false;
     this.inputWasmPath = options.inputWasmPath ?? null;
     this.watchWasmPath = null;
     this.syncWatchWasmPath();
@@ -237,7 +239,7 @@ class WasmTarget {
   }
 
   private syncWatchWasmPath() {
-    if (this.inputWasmPath == null) {
+    if (this.inputWasmPath == null || !this.watchInputWasm) {
       this.watchWasmPath = null;
     } else {
       const components = path.normalize(this.inputWasmPath).split(path.sep);

@@ -382,7 +382,7 @@ class WasmManager {
 }
 class WasmTarget {
     constructor(id, options) {
-        var _a, _b, _c, _d, _e, _f, _g;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         if (typeof options === 'string') {
             options = { manifestPath: options };
         }
@@ -393,7 +393,8 @@ class WasmTarget {
         this.ignoreBuildError = (_d = options.ignoreBuildError) !== null && _d !== void 0 ? _d : false;
         this.crateName = (_e = options.crateName) !== null && _e !== void 0 ? _e : null;
         this.skipBindgen = (_f = options.skipBindgen) !== null && _f !== void 0 ? _f : false;
-        this.inputWasmPath = (_g = options.inputWasmPath) !== null && _g !== void 0 ? _g : null;
+        this.watchInputWasm = (_g = options.watchInputWasm) !== null && _g !== void 0 ? _g : false;
+        this.inputWasmPath = (_h = options.inputWasmPath) !== null && _h !== void 0 ? _h : null;
         this.watchWasmPath = null;
         this.syncWatchWasmPath();
         this.outputDir = null;
@@ -489,7 +490,7 @@ class WasmTarget {
             name.startsWith(this.outputName));
     }
     syncWatchWasmPath() {
-        if (this.inputWasmPath == null) {
+        if (this.inputWasmPath == null || !this.watchInputWasm) {
             this.watchWasmPath = null;
         }
         else {

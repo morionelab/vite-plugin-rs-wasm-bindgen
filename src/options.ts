@@ -15,4 +15,5 @@ export type TargetOptions =
       crateName?: string;
       skipBindgen?: boolean;
       inputWasmPath?: string;
+      watchInputWasm?: boolean;
     };
