@@ -51,12 +51,12 @@ export class WasmManager {
     }
   }
 
-  listWatchWasmPath(): Array<string> {
+  listWatchWasmDir(): Array<string> {
     const list = [];
     for (const target of this.targets) {
       const watchWasmPath = target.getWatchWasmPath();
       if (watchWasmPath != null) {
-        list.push(watchWasmPath);
+        list.push(path.dirname(watchWasmPath));
       }
     }
     return list;

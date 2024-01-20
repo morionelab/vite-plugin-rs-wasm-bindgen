@@ -337,12 +337,12 @@ class WasmManager {
             }
         });
     }
-    listWatchWasmPath() {
+    listWatchWasmDir() {
         const list = [];
         for (const target of this.targets) {
             const watchWasmPath = target.getWatchWasmPath();
             if (watchWasmPath != null) {
-                list.push(watchWasmPath);
+                list.push(path__namespace.dirname(watchWasmPath));
             }
         }
         return list;
@@ -513,8 +513,8 @@ function rsWasmBindgen(options) {
         buildStart(_inputOptions) {
             return __awaiter(this, void 0, void 0, function* () {
                 yield wasmManager.buildAll();
-                for (const watchWasmPath of wasmManager.listWatchWasmPath()) {
-                    this.addWatchFile(watchWasmPath);
+                for (const watchWasmDir of wasmManager.listWatchWasmDir()) {
+                    this.addWatchFile(watchWasmDir);
                 }
             });
         },
@@ -527,9 +527,9 @@ function rsWasmBindgen(options) {
                 return wasmManager.loadWasmAsProxyCode(id);
             });
         },
-        watchChange(id, _change) {
+        watchChange(id, change) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (/\.wasm$/i.test(id)) {
+                if (/\.wasm$/i.test(id) && change.event != 'delete') {
                     yield wasmManager.handleWasmChange(id);
                 }
             });

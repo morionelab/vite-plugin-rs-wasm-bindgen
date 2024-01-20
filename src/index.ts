@@ -17,8 +17,8 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     async buildStart(_inputOptions) {
       await wasmManager.buildAll();
 
-      for (const watchWasmPath of wasmManager.listWatchWasmPath()) {
-        this.addWatchFile(watchWasmPath);
+      for (const watchWasmDir of wasmManager.listWatchWasmDir()) {
+        this.addWatchFile(watchWasmDir);
       }
     },
 
@@ -32,8 +32,8 @@ export default function rsWasmBindgen(options?: Options): Plugin {
       return wasmManager.loadWasmAsProxyCode(id);
     },
 
-    async watchChange(id, _change) {
-      if (/\.wasm$/i.test(id)) {
+    async watchChange(id, change) {
+      if (/\.wasm$/i.test(id) && change.event != 'delete') {
         await wasmManager.handleWasmChange(id);
       }
     },
