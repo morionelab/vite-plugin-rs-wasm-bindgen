@@ -74,7 +74,7 @@ class WasmData {
         });
     }
     generateProxyCode(syncImport) {
-        const wasmUrlUrl = JSON.stringify('./' + this.fileName + '?url');
+        const wasmUrlUrl = JSON.stringify("./" + this.fileName + "?url");
         // import statements
         const importStmtLines = [];
         const importObjectItemLines = [];
@@ -83,8 +83,8 @@ class WasmData {
             importStmtLines.push(`import * as m${index} from ${importModuleLit};`);
             importObjectItemLines.push(`[${importModuleLit}]: m${index},`);
         });
-        const importStmts = importStmtLines.join('\n');
-        const importObjectItems = importObjectItemLines.join('\n');
+        const importStmts = importStmtLines.join("\n");
+        const importObjectItems = importObjectItemLines.join("\n");
         // export statements
         const exportStmtLines = [];
         const exportAssignLines = [];
@@ -93,8 +93,8 @@ class WasmData {
             exportStmtLines.push(`let x${index} = undefined;`, `export {x${index} as ${nameLit}};`);
             exportAssignLines.push(`x${index} = exports[${nameLit}];`);
         });
-        const exportStmts = exportStmtLines.join('\n');
-        const exportAssigns = exportAssignLines.join('\n');
+        const exportStmts = exportStmtLines.join("\n");
+        const exportAssigns = exportAssignLines.join("\n");
         // init function
         const initProxyFuncDef = `
     async function initProxy() {
@@ -140,10 +140,10 @@ function execCargoBuildWasm(args) {
         const ignoreError = args.ignoreError;
         let skipReason = null;
         if (skipBuild) {
-            skipReason = 'skipBuild';
+            skipReason = "skipBuild";
         }
         else if (manifestPath === null) {
-            skipReason = 'no manifestPath';
+            skipReason = "no manifestPath";
         }
         if (skipReason !== null) {
             if (verbose) {
@@ -151,28 +151,28 @@ function execCargoBuildWasm(args) {
             }
             return true;
         }
-        const command = 'cargo';
+        const command = "cargo";
         const commandArgs = [];
-        commandArgs.push('build', '--lib');
-        commandArgs.push('--manifest-path', manifestPath);
-        commandArgs.push('--target', 'wasm32-unknown-unknown');
-        if (profile == 'release') {
-            commandArgs.push('--release');
+        commandArgs.push("build", "--lib");
+        commandArgs.push("--manifest-path", manifestPath);
+        commandArgs.push("--target", "wasm32-unknown-unknown");
+        if (profile == "release") {
+            commandArgs.push("--release");
         }
-        else if (profile != 'dev') {
-            commandArgs.push('--profile');
+        else if (profile != "dev") {
+            commandArgs.push("--profile");
             commandArgs.push(profile);
         }
         try {
             if (verbose) {
-                const joinedArgs = commandArgs.join(' ');
+                const joinedArgs = commandArgs.join(" ");
                 logger.info(`building source wasm of ${targetId}: ${command} ${joinedArgs}`);
             }
             yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }
         catch (error) {
-            const ignored = ignoreError ? ' (ignored)' : '';
+            const ignored = ignoreError ? " (ignored)" : "";
             logger.error(`building source wasm of ${targetId} failed${ignored}`);
             if (!suppressError) {
                 process.stderr.write(error.stderr);
@@ -193,10 +193,10 @@ function execCargoMetadata(args) {
         const verbose = args.verbose;
         let skipReason = null;
         if (skipBindgen) {
-            skipReason = 'skipBindgen';
+            skipReason = "skipBindgen";
         }
         else if (manifestPath === null) {
-            skipReason = 'no manifestPath';
+            skipReason = "no manifestPath";
         }
         if (skipReason !== null) {
             if (verbose) {
@@ -204,11 +204,11 @@ function execCargoMetadata(args) {
             }
             return null;
         }
-        const command = 'cargo';
+        const command = "cargo";
         const commandArgs = [];
-        commandArgs.push('metadata', '--no-deps');
-        commandArgs.push('--manifest-path', manifestPath);
-        commandArgs.push('--format-version', '1');
+        commandArgs.push("metadata", "--no-deps");
+        commandArgs.push("--manifest-path", manifestPath);
+        commandArgs.push("--format-version", "1");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let metadata = null;
         try {
@@ -222,8 +222,8 @@ function execCargoMetadata(args) {
             logger.error(`reading cargo metadata of ${targetId} failed`);
             return null;
         }
-        const targetDirectory = metadata['target_directory'];
-        const packages = metadata['packages'];
+        const targetDirectory = metadata["target_directory"];
+        const packages = metadata["packages"];
         let crateName = null;
         if (givenCrateName !== null) {
             crateName = givenCrateName;
@@ -241,17 +241,17 @@ function execCargoMetadata(args) {
             return null;
         }
         let profileDirectory;
-        if (profile == 'dev' || profile == 'test') {
-            profileDirectory = 'debug';
+        if (profile == "dev" || profile == "test") {
+            profileDirectory = "debug";
         }
-        else if (profile == 'bench') {
-            profileDirectory = 'release';
+        else if (profile == "bench") {
+            profileDirectory = "release";
         }
         else {
             // as-is (including release)
             profileDirectory = profile;
         }
-        const inputWasmPath = path__namespace.join(targetDirectory, 'wasm32-unknown-unknown', profileDirectory, crateName.replace(/-/g, '_') + '.wasm');
+        const inputWasmPath = path__namespace.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, "_") + ".wasm");
         if (verbose) {
             logger.info(` => ${inputWasmPath}`);
         }
@@ -269,7 +269,7 @@ function execWasmBindgen(args) {
         const verbose = args.verbose;
         let skipReason = null;
         if (skipBindgen) {
-            skipReason = 'skipBindgen';
+            skipReason = "skipBindgen";
         }
         if (skipReason !== null) {
             if (verbose) {
@@ -277,15 +277,15 @@ function execWasmBindgen(args) {
             }
             return true;
         }
-        const command = 'wasm-bindgen';
+        const command = "wasm-bindgen";
         const commandArgs = [];
-        commandArgs.push('--out-dir', outputDir);
-        commandArgs.push('--out-name', outputName);
-        commandArgs.push('--target', 'bundler');
+        commandArgs.push("--out-dir", outputDir);
+        commandArgs.push("--out-name", outputName);
+        commandArgs.push("--target", "bundler");
         commandArgs.push(inputWasmPath);
         try {
             if (verbose) {
-                const joinedArgs = commandArgs.join(' ');
+                const joinedArgs = commandArgs.join(" ");
                 logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
             }
             yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
@@ -304,7 +304,7 @@ class WasmManager {
         this.suppressError = false;
         // config
         this.logger = null;
-        this.pathRoot = null;
+        this.root = null;
         this.isProduction = false;
         this.verbose = (_a = options.verbose) !== null && _a !== void 0 ? _a : false;
         this.suppressError = (_b = options.suppressError) !== null && _b !== void 0 ? _b : false;
@@ -320,18 +320,21 @@ class WasmManager {
     applyConfig(config) {
         var _a;
         this.logger = (_a = config.customLogger) !== null && _a !== void 0 ? _a : config.logger;
-        this.pathRoot = config.root;
+        this.root = config.root;
         this.isProduction = config.isProduction;
+    }
+    makeBuildArgs() {
+        return {
+            verbose: this.verbose,
+            isProduction: this.isProduction,
+            logger: this.logger,
+            root: this.root,
+            suppressError: this.suppressError,
+        };
     }
     buildAll() {
         return __awaiter(this, void 0, void 0, function* () {
-            const args = {
-                verbose: this.verbose,
-                isProduction: this.isProduction,
-                logger: this.logger,
-                pathRoot: this.pathRoot,
-                suppressError: this.suppressError,
-            };
+            const args = this.makeBuildArgs();
             for (const target of this.targets) {
                 yield target.build(args);
             }
@@ -353,13 +356,7 @@ class WasmManager {
             if (targets.length == 0) {
                 return;
             }
-            const args = {
-                verbose: this.verbose,
-                isProduction: this.isProduction,
-                logger: this.logger,
-                pathRoot: this.pathRoot,
-                suppressError: this.suppressError,
-            };
+            const args = this.makeBuildArgs();
             for (const target of targets) {
                 yield target.bindgen(args);
             }
@@ -383,7 +380,7 @@ class WasmManager {
 class WasmTarget {
     constructor(id, options) {
         var _a, _b, _c, _d, _e, _f, _g, _h;
-        if (typeof options === 'string') {
+        if (typeof options === "string") {
             options = { manifestPath: options };
         }
         this.id = id;
@@ -416,14 +413,11 @@ class WasmTarget {
     buildInputWasm(args) {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
-            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? 'release' : 'dev');
-            const manifestPath = this.manifestPath
-                ? path__namespace.join(args.pathRoot, this.manifestPath)
-                : null;
+            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
             return yield execCargoBuildWasm({
                 targetId: this.id,
                 skipBuild: this.skipBuild,
-                manifestPath,
+                manifestPath: this.manifestPath,
                 profile,
                 ignoreError: this.ignoreBuildError,
                 logger: args.logger,
@@ -438,14 +432,11 @@ class WasmTarget {
             if (this.inputWasmPath !== null) {
                 return true;
             }
-            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? 'release' : 'dev');
-            const manifestPath = this.manifestPath
-                ? path__namespace.join(args.pathRoot, this.manifestPath)
-                : null;
+            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
             this.inputWasmPath = yield execCargoMetadata({
                 targetId: this.id,
                 skipBindgen: this.skipBindgen,
-                manifestPath,
+                manifestPath: this.manifestPath,
                 crateName: this.crateName,
                 profile,
                 logger: args.logger,
@@ -460,7 +451,7 @@ class WasmTarget {
             if (this.inputWasmPath === null) {
                 return false;
             }
-            const targetPathPrefix = path__namespace.join(args.pathRoot, this.id);
+            const targetPathPrefix = path__namespace.join(args.root, this.id);
             const outputDir = path__namespace.dirname(targetPathPrefix);
             const outputName = path__namespace.basename(targetPathPrefix);
             const ok = yield execWasmBindgen({
@@ -486,7 +477,7 @@ class WasmTarget {
         if (this.outputDir === null || this.outputName === null) {
             return false;
         }
-        return (path__namespace.relative(this.outputDir, dir) == '' &&
+        return (path__namespace.relative(this.outputDir, dir) == "" &&
             name.startsWith(this.outputName));
     }
     syncWatchWasmPath() {
@@ -495,7 +486,7 @@ class WasmTarget {
         }
         else {
             const components = path__namespace.normalize(this.inputWasmPath).split(path__namespace.sep);
-            this.watchWasmPath = components.join('/');
+            this.watchWasmPath = components.join("/");
         }
     }
     getWatchWasmPath() {
@@ -503,7 +494,7 @@ class WasmTarget {
     }
 }
 
-const PLUGIN_NAME = 'rs-wasm-bindgen';
+const PLUGIN_NAME = "rs-wasm-bindgen";
 function rsWasmBindgen(options) {
     const wasmManager = new WasmManager(options !== null && options !== void 0 ? options : {});
     return {
@@ -530,7 +521,7 @@ function rsWasmBindgen(options) {
         },
         watchChange(id, change) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (/\.wasm$/i.test(id) && change.event != 'delete') {
+                if (/\.wasm$/i.test(id) && change.event != "delete") {
                     yield wasmManager.handleWasmChange(id);
                 }
             });

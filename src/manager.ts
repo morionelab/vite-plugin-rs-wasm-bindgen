@@ -14,7 +14,7 @@ export class WasmManager {
 
   // config
   private logger: Logger | null = null
-  private pathRoot: string | null = null
+  private root: string | null = null
   private isProduction: boolean = false
 
   constructor(options: Options) {
@@ -33,18 +33,22 @@ export class WasmManager {
 
   applyConfig(config: ResolvedConfig) {
     this.logger = config.customLogger ?? config.logger
-    this.pathRoot = config.root
+    this.root = config.root
     this.isProduction = config.isProduction
   }
 
-  async buildAll() {
-    const args = {
+  private makeBuildArgs(): WasmTargetBuildArgs {
+    return {
       verbose: this.verbose,
       isProduction: this.isProduction,
       logger: this.logger!,
-      pathRoot: this.pathRoot!,
+      root: this.root!,
       suppressError: this.suppressError,
     }
+  }
+
+  async buildAll() {
+    const args = this.makeBuildArgs()
 
     for (const target of this.targets) {
       await target.build(args)
@@ -70,13 +74,7 @@ export class WasmManager {
       return
     }
 
-    const args = {
-      verbose: this.verbose,
-      isProduction: this.isProduction,
-      logger: this.logger!,
-      pathRoot: this.pathRoot!,
-      suppressError: this.suppressError,
-    }
+    const args = this.makeBuildArgs()
 
     for (const target of targets) {
       await target.bindgen(args)
@@ -104,7 +102,7 @@ type WasmTargetBuildArgs = {
   logger: Logger
   verbose: boolean
   isProduction: boolean
-  pathRoot: string
+  root: string
   suppressError: boolean
 }
 
@@ -157,14 +155,11 @@ class WasmTarget {
 
   private async buildInputWasm(args: WasmTargetBuildArgs): Promise<boolean> {
     const profile = this.buildProfile ?? (args.isProduction ? "release" : "dev")
-    const manifestPath = this.manifestPath
-      ? path.join(args.pathRoot, this.manifestPath)
-      : null
 
     return await execCargoBuildWasm({
       targetId: this.id,
       skipBuild: this.skipBuild,
-      manifestPath,
+      manifestPath: this.manifestPath,
       profile,
       ignoreError: this.ignoreBuildError,
       logger: args.logger,
@@ -179,14 +174,11 @@ class WasmTarget {
     }
 
     const profile = this.buildProfile ?? (args.isProduction ? "release" : "dev")
-    const manifestPath = this.manifestPath
-      ? path.join(args.pathRoot, this.manifestPath)
-      : null
 
     this.inputWasmPath = await execCargoMetadata({
       targetId: this.id,
       skipBindgen: this.skipBindgen,
-      manifestPath,
+      manifestPath: this.manifestPath,
       crateName: this.crateName,
       profile,
       logger: args.logger,
@@ -203,7 +195,7 @@ class WasmTarget {
       return false
     }
 
-    const targetPathPrefix = path.join(args.pathRoot, this.id)
+    const targetPathPrefix = path.join(args.root, this.id)
     const outputDir = path.dirname(targetPathPrefix)
     const outputName = path.basename(targetPathPrefix)
 
