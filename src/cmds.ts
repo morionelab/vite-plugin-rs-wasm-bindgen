@@ -1,240 +1,240 @@
-import * as path from 'node:path';
-import { promisify } from 'node:util';
-import { execFile } from 'node:child_process';
-import { Logger } from 'vite';
+import * as path from "node:path"
+import { promisify } from "node:util"
+import { execFile } from "node:child_process"
+import { Logger } from "vite"
 
 //
 // cargo build
 //
 type CargoBuildWasmArgs = {
-  targetId: string;
-  skipBuild: boolean;
-  manifestPath: null | string;
-  profile: string;
-  ignoreError: boolean;
-  logger: Logger;
-  verbose: boolean;
-  suppressError: boolean;
-};
+  targetId: string
+  skipBuild: boolean
+  manifestPath: null | string
+  profile: string
+  ignoreError: boolean
+  logger: Logger
+  verbose: boolean
+  suppressError: boolean
+}
 
 export async function execCargoBuildWasm(
   args: CargoBuildWasmArgs,
 ): Promise<boolean> {
-  const logger = args.logger;
-  const verbose = args.verbose;
-  const suppressError = args.suppressError;
-  const profile = args.profile;
-  const targetId = args.targetId;
-  const manifestPath = args.manifestPath;
-  const skipBuild = args.skipBuild;
-  const ignoreError = args.ignoreError;
+  const logger = args.logger
+  const verbose = args.verbose
+  const suppressError = args.suppressError
+  const profile = args.profile
+  const targetId = args.targetId
+  const manifestPath = args.manifestPath
+  const skipBuild = args.skipBuild
+  const ignoreError = args.ignoreError
 
-  let skipReason: null | string = null;
+  let skipReason: null | string = null
 
   if (skipBuild) {
-    skipReason = 'skipBuild';
+    skipReason = "skipBuild"
   } else if (manifestPath === null) {
-    skipReason = 'no manifestPath';
+    skipReason = "no manifestPath"
   }
 
   if (skipReason !== null) {
     if (verbose) {
-      logger.info(`skip building source wasm of ${targetId} (${skipReason})`);
+      logger.info(`skip building source wasm of ${targetId} (${skipReason})`)
     }
-    return true;
+    return true
   }
 
-  const command = 'cargo';
-  const commandArgs: Array<string> = [];
+  const command = "cargo"
+  const commandArgs: Array<string> = []
 
-  commandArgs.push('build', '--lib');
-  commandArgs.push('--manifest-path', manifestPath!);
-  commandArgs.push('--target', 'wasm32-unknown-unknown');
+  commandArgs.push("build", "--lib")
+  commandArgs.push("--manifest-path", manifestPath!)
+  commandArgs.push("--target", "wasm32-unknown-unknown")
 
-  if (profile == 'release') {
-    commandArgs.push('--release');
-  } else if (profile != 'dev') {
-    commandArgs.push('--profile');
-    commandArgs.push(profile);
+  if (profile == "release") {
+    commandArgs.push("--release")
+  } else if (profile != "dev") {
+    commandArgs.push("--profile")
+    commandArgs.push(profile)
   }
 
   try {
     if (verbose) {
-      const joinedArgs = commandArgs.join(' ');
+      const joinedArgs = commandArgs.join(" ")
       logger.info(
         `building source wasm of ${targetId}: ${command} ${joinedArgs}`,
-      );
+      )
     }
-    await promisify(execFile)(command, commandArgs);
+    await promisify(execFile)(command, commandArgs)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
-    const ignored = ignoreError ? ' (ignored)' : '';
-    logger.error(`building source wasm of ${targetId} failed${ignored}`);
+    const ignored = ignoreError ? " (ignored)" : ""
+    logger.error(`building source wasm of ${targetId} failed${ignored}`)
 
     if (!suppressError) {
-      process.stderr.write(error.stderr);
+      process.stderr.write(error.stderr)
     }
-    return ignoreError;
+    return ignoreError
   }
 
-  return true;
+  return true
 }
 
 //
 // cargo metadata
 //
 type CargoMetadataArgs = {
-  targetId: string;
-  skipBindgen: boolean;
-  manifestPath: null | string;
-  crateName: null | string;
-  profile: string;
-  logger: Logger;
-  verbose: boolean;
-};
+  targetId: string
+  skipBindgen: boolean
+  manifestPath: null | string
+  crateName: null | string
+  profile: string
+  logger: Logger
+  verbose: boolean
+}
 
 export async function execCargoMetadata(
   args: CargoMetadataArgs,
 ): Promise<null | string> {
-  const targetId = args.targetId;
-  const skipBindgen = args.skipBindgen;
-  const manifestPath = args.manifestPath;
-  const givenCrateName = args.crateName;
-  const profile = args.profile;
-  const logger = args.logger;
-  const verbose = args.verbose;
+  const targetId = args.targetId
+  const skipBindgen = args.skipBindgen
+  const manifestPath = args.manifestPath
+  const givenCrateName = args.crateName
+  const profile = args.profile
+  const logger = args.logger
+  const verbose = args.verbose
 
-  let skipReason: null | string = null;
+  let skipReason: null | string = null
 
   if (skipBindgen) {
-    skipReason = 'skipBindgen';
+    skipReason = "skipBindgen"
   } else if (manifestPath === null) {
-    skipReason = 'no manifestPath';
+    skipReason = "no manifestPath"
   }
 
   if (skipReason !== null) {
     if (verbose) {
-      console.info(`skip locating source wasm of ${targetId} (${skipReason})`);
+      console.info(`skip locating source wasm of ${targetId} (${skipReason})`)
     }
-    return null;
+    return null
   }
 
-  const command = 'cargo';
-  const commandArgs: Array<string> = [];
-  commandArgs.push('metadata', '--no-deps');
-  commandArgs.push('--manifest-path', manifestPath!);
-  commandArgs.push('--format-version', '1');
+  const command = "cargo"
+  const commandArgs: Array<string> = []
+  commandArgs.push("metadata", "--no-deps")
+  commandArgs.push("--manifest-path", manifestPath!)
+  commandArgs.push("--format-version", "1")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let metadata: any = null;
+  let metadata: any = null
   try {
     if (verbose) {
-      console.info(`resloving input wasm of ${targetId}`);
+      console.info(`resloving input wasm of ${targetId}`)
     }
-    const { stdout } = await promisify(execFile)(command, commandArgs);
-    metadata = JSON.parse(stdout);
+    const { stdout } = await promisify(execFile)(command, commandArgs)
+    metadata = JSON.parse(stdout)
   } catch (error) {
-    logger.error(`reading cargo metadata of ${targetId} failed`);
-    return null;
+    logger.error(`reading cargo metadata of ${targetId} failed`)
+    return null
   }
 
-  const targetDirectory = metadata['target_directory'] as string;
-  const packages = metadata['packages'];
+  const targetDirectory = metadata["target_directory"] as string
+  const packages = metadata["packages"]
 
-  let crateName: null | string = null;
+  let crateName: null | string = null
   if (givenCrateName !== null) {
-    crateName = givenCrateName;
+    crateName = givenCrateName
   } else if (packages && packages.length == 1) {
-    const package_ = packages[0];
-    crateName = package_.name as string;
+    const package_ = packages[0]
+    crateName = package_.name as string
   } else {
     logger.error(
       `packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`,
-    );
-    return null;
+    )
+    return null
   }
 
   if (targetDirectory === null || crateName === null) {
-    logger.error(`target directory or crate name of ${targetId} is missing`);
-    return null;
+    logger.error(`target directory or crate name of ${targetId} is missing`)
+    return null
   }
 
-  let profileDirectory: string;
-  if (profile == 'dev' || profile == 'test') {
-    profileDirectory = 'debug';
-  } else if (profile == 'bench') {
-    profileDirectory = 'release';
+  let profileDirectory: string
+  if (profile == "dev" || profile == "test") {
+    profileDirectory = "debug"
+  } else if (profile == "bench") {
+    profileDirectory = "release"
   } else {
     // as-is (including release)
-    profileDirectory = profile;
+    profileDirectory = profile
   }
 
   const inputWasmPath = path.join(
     targetDirectory,
-    'wasm32-unknown-unknown',
+    "wasm32-unknown-unknown",
     profileDirectory,
-    crateName.replace(/-/g, '_') + '.wasm',
-  );
+    crateName.replace(/-/g, "_") + ".wasm",
+  )
 
   if (verbose) {
-    logger.info(` => ${inputWasmPath}`);
+    logger.info(` => ${inputWasmPath}`)
   }
-  return inputWasmPath;
+  return inputWasmPath
 }
 
 //
 // wasm-bindgen
 //
 type WasmBindgenArgs = {
-  targetId: string;
-  skipBindgen: boolean;
-  inputWasmPath: string;
-  outputDir: string;
-  outputName: string;
-  logger: Logger;
-  verbose: boolean;
-};
+  targetId: string
+  skipBindgen: boolean
+  inputWasmPath: string
+  outputDir: string
+  outputName: string
+  logger: Logger
+  verbose: boolean
+}
 
 export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
-  const targetId = args.targetId;
-  const skipBindgen = args.skipBindgen;
-  const inputWasmPath = args.inputWasmPath;
-  const outputDir = args.outputDir;
-  const outputName = args.outputName;
-  const logger = args.logger;
-  const verbose = args.verbose;
+  const targetId = args.targetId
+  const skipBindgen = args.skipBindgen
+  const inputWasmPath = args.inputWasmPath
+  const outputDir = args.outputDir
+  const outputName = args.outputName
+  const logger = args.logger
+  const verbose = args.verbose
 
-  let skipReason: null | string = null;
+  let skipReason: null | string = null
 
   if (skipBindgen) {
-    skipReason = 'skipBindgen';
+    skipReason = "skipBindgen"
   }
 
   if (skipReason !== null) {
     if (verbose) {
-      logger.info(`skip wasm-bindgen of ${targetId} (${skipReason})`);
+      logger.info(`skip wasm-bindgen of ${targetId} (${skipReason})`)
     }
-    return true;
+    return true
   }
 
-  const command = 'wasm-bindgen';
-  const commandArgs: Array<string> = [];
+  const command = "wasm-bindgen"
+  const commandArgs: Array<string> = []
 
-  commandArgs.push('--out-dir', outputDir);
-  commandArgs.push('--out-name', outputName);
-  commandArgs.push('--target', 'bundler');
-  commandArgs.push(inputWasmPath);
+  commandArgs.push("--out-dir", outputDir)
+  commandArgs.push("--out-name", outputName)
+  commandArgs.push("--target", "bundler")
+  commandArgs.push(inputWasmPath)
 
   try {
     if (verbose) {
-      const joinedArgs = commandArgs.join(' ');
-      logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
+      const joinedArgs = commandArgs.join(" ")
+      logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`)
     }
-    await promisify(execFile)(command, commandArgs);
+    await promisify(execFile)(command, commandArgs)
   } catch (error) {
-    logger.error(`bindgen ${targetId} failed`);
-    return false;
+    logger.error(`bindgen ${targetId} failed`)
+    return false
   }
 
-  return true;
+  return true
 }
