@@ -57,11 +57,13 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
+const MANUAL_START_FUNC = "__wbindgen_start";
 class WasmData {
-    constructor(fileName, importModules, exportNames) {
+    constructor(fileName, importModules, exportNames, manualStart) {
         this.fileName = fileName;
         this.importModules = importModules;
         this.exportNames = exportNames;
+        this.manualStart = manualStart;
     }
     static create(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -70,7 +72,13 @@ class WasmData {
             const wasm = yield WebAssembly.compile(buffer);
             const importModules = Array.from(new Set(WebAssembly.Module.imports(wasm).map((desc) => desc.module)).keys());
             const exportNames = Array.from(new Set(WebAssembly.Module.exports(wasm).map((desc) => desc.name)).keys());
-            return new WasmData(fileName, importModules, exportNames);
+            // remove '__wbindgen_start' from the export names if exists
+            const manualStartIndex = exportNames.findIndex((value) => value == MANUAL_START_FUNC);
+            const manualStart = manualStartIndex != -1;
+            if (manualStart) {
+                exportNames.splice(manualStartIndex, 1);
+            }
+            return new WasmData(fileName, importModules, exportNames, manualStart);
         });
     }
     generateProxyCode(syncImport) {
@@ -93,8 +101,16 @@ class WasmData {
             exportStmtLines.push(`let x${index} = undefined;`, `export {x${index} as ${nameLit}};`);
             exportAssignLines.push(`x${index} = exports[${nameLit}];`);
         });
+        if (this.manualStart) {
+            // add dummy (nop) manual start function
+            exportStmtLines.push(`export function ${MANUAL_START_FUNC}() {}`);
+        }
         const exportStmts = exportStmtLines.join("\n");
         const exportAssigns = exportAssignLines.join("\n");
+        let callManualStart = "";
+        if (this.manualStart) {
+            callManualStart = `instance.exports['${MANUAL_START_FUNC}']();`;
+        }
         // init function
         const initProxyFuncDef = `
     async function initProxy() {
@@ -107,7 +123,10 @@ class WasmData {
       const { instance } = await WebAssembly.instantiateStreaming(source, imports);
 
       const exports = instance.exports;
-      ${exportAssigns};
+
+      ${exportAssigns}
+
+      ${callManualStart}
     }
     `;
         const initProxyCallOrExport = syncImport

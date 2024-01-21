@@ -1,19 +1,24 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 
+const MANUAL_START_FUNC = "__wbindgen_start"
+
 export class WasmData {
   private fileName: string
   private importModules: Array<string>
   private exportNames: Array<string>
+  private manualStart: boolean
 
   private constructor(
     fileName: string,
     importModules: Array<string>,
     exportNames: Array<string>,
+    manualStart: boolean,
   ) {
     this.fileName = fileName
     this.importModules = importModules
     this.exportNames = exportNames
+    this.manualStart = manualStart
   }
 
   static async create(wasmPath: string): Promise<WasmData> {
@@ -32,7 +37,16 @@ export class WasmData {
       new Set(WebAssembly.Module.exports(wasm).map((desc) => desc.name)).keys(),
     )
 
-    return new WasmData(fileName, importModules, exportNames)
+    // remove '__wbindgen_start' from the export names if exists
+    const manualStartIndex = exportNames.findIndex(
+      (value) => value == MANUAL_START_FUNC,
+    )
+    const manualStart = manualStartIndex != -1
+    if (manualStart) {
+      exportNames.splice(manualStartIndex, 1)
+    }
+
+    return new WasmData(fileName, importModules, exportNames, manualStart)
   }
 
   generateProxyCode(syncImport: boolean): string {
@@ -67,8 +81,18 @@ export class WasmData {
       exportAssignLines.push(`x${index} = exports[${nameLit}];`)
     })
 
+    if (this.manualStart) {
+      // add dummy (nop) manual start function
+      exportStmtLines.push(`export function ${MANUAL_START_FUNC}() {}`)
+    }
+
     const exportStmts = exportStmtLines.join("\n")
     const exportAssigns = exportAssignLines.join("\n")
+
+    let callManualStart = ""
+    if (this.manualStart) {
+      callManualStart = `instance.exports['${MANUAL_START_FUNC}']();`
+    }
 
     // init function
     const initProxyFuncDef = `
@@ -82,7 +106,10 @@ export class WasmData {
       const { instance } = await WebAssembly.instantiateStreaming(source, imports);
 
       const exports = instance.exports;
-      ${exportAssigns};
+
+      ${exportAssigns}
+
+      ${callManualStart}
     }
     `
 
