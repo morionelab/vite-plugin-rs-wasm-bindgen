@@ -91,31 +91,30 @@ export class WasmData {
 
     let callManualStart = ""
     if (this.manualStart) {
-      callManualStart = `instance.exports['${MANUAL_START_FUNC}']();`
+      callManualStart = `exports['${MANUAL_START_FUNC}']();`
     }
 
     // init function
-    const initProxyFuncDef = `
-    async function initProxy() {
-      const source = fetch(wasmUrl);
-
+    const initPromise = `
+    const init = (() => {
       const imports = {
         ${importObjectItems}
       };
+      const source = fetch(wasmUrl);
 
-      const { instance } = await WebAssembly.instantiateStreaming(source, imports);
+      return WebAssembly.instantiateStreaming(source, imports).then((result) => {
+        const { instance } = result;
 
-      const exports = instance.exports;
-
-      ${exportAssigns}
-
-      ${callManualStart}
-    }
+        const exports = instance.exports;
+        ${exportAssigns}
+        ${callManualStart}  
+      });
+    })();
     `
 
-    const initProxyCallOrExport = syncImport
-      ? `await initProxy();`
-      : `export default initProxy`
+    const initPromiseWaitOrExport = syncImport
+      ? `await init;`
+      : `export default init;`
 
     // generate proxy code
     return `
@@ -125,9 +124,9 @@ export class WasmData {
 
     ${exportStmts}
 
-    ${initProxyFuncDef}
+    ${initPromise}
 
-    ${initProxyCallOrExport}
+    ${initPromiseWaitOrExport}
     `
   }
 }
