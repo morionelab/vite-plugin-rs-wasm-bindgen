@@ -242,20 +242,19 @@ function execCargoMetadata(args) {
         }
         const targetDirectory = metadata["target_directory"];
         const packages = metadata["packages"];
-        let crateName = null;
-        if (givenCrateName !== null) {
-            crateName = givenCrateName;
+        let mainCrateName = null;
+        for (const package_ of packages) {
+            if (package_["manifest_path"] === manifestPath) {
+                mainCrateName = package_["name"];
+            }
         }
-        else if (packages && packages.length == 1) {
-            const package_ = packages[0];
-            crateName = package_.name;
-        }
-        else {
-            logger.error(`packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`);
+        const crateName = givenCrateName !== null && givenCrateName !== void 0 ? givenCrateName : mainCrateName;
+        if (targetDirectory === null) {
+            logger.error(`target directory of ${targetId} is missing`);
             return null;
         }
-        if (targetDirectory === null || crateName === null) {
-            logger.error(`target directory or crate name of ${targetId} is missing`);
+        else if (crateName === null) {
+            logger.error(`failed in resolving package name of ${targetId} (explicit crateName is required)`);
             return null;
         }
         let profileDirectory;
@@ -411,9 +410,15 @@ class WasmTarget {
         this.watchInputWasm = (_g = options.watchInputWasm) !== null && _g !== void 0 ? _g : false;
         this.inputWasmPath = (_h = options.inputWasmPath) !== null && _h !== void 0 ? _h : null;
         this.watchWasmPath = null;
-        this.syncWatchWasmPath();
         this.outputDir = null;
         this.outputName = null;
+        if (this.manifestPath !== null) {
+            this.manifestPath = path__namespace.resolve(this.manifestPath);
+        }
+        if (this.inputWasmPath !== null) {
+            this.inputWasmPath = path__namespace.resolve(this.inputWasmPath);
+        }
+        this.syncWatchWasmPath();
     }
     build(args) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -460,6 +465,9 @@ class WasmTarget {
                 logger: args.logger,
                 verbose: args.verbose,
             });
+            if (this.inputWasmPath !== null) {
+                this.inputWasmPath = path__namespace.resolve(this.inputWasmPath);
+            }
             this.syncWatchWasmPath();
             return this.inputWasmPath !== null;
         });

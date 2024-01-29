@@ -140,22 +140,22 @@ export async function execCargoMetadata(
 
   const targetDirectory = metadata["target_directory"] as string
   const packages = metadata["packages"]
-
-  let crateName: null | string = null
-  if (givenCrateName !== null) {
-    crateName = givenCrateName
-  } else if (packages && packages.length == 1) {
-    const package_ = packages[0]
-    crateName = package_.name as string
-  } else {
-    logger.error(
-      `packages in cargo metadata of ${targetId} is not unique (explicit crateName is required)`,
-    )
-    return null
+  let mainCrateName: null | string = null
+  for (const package_ of packages) {
+    if (package_["manifest_path"] === manifestPath) {
+      mainCrateName = package_["name"]
+    }
   }
 
-  if (targetDirectory === null || crateName === null) {
-    logger.error(`target directory or crate name of ${targetId} is missing`)
+  const crateName = givenCrateName ?? mainCrateName
+
+  if (targetDirectory === null) {
+    logger.error(`target directory of ${targetId} is missing`)
+    return null
+  } else if (crateName === null) {
+    logger.error(
+      `failed in resolving package name of ${targetId} (explicit crateName is required)`,
+    )
     return null
   }
 

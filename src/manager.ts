@@ -136,9 +136,16 @@ class WasmTarget {
     this.watchInputWasm = options.watchInputWasm ?? false
     this.inputWasmPath = options.inputWasmPath ?? null
     this.watchWasmPath = null
-    this.syncWatchWasmPath()
     this.outputDir = null
     this.outputName = null
+
+    if (this.manifestPath !== null) {
+      this.manifestPath = path.resolve(this.manifestPath)
+    }
+    if (this.inputWasmPath !== null) {
+      this.inputWasmPath = path.resolve(this.inputWasmPath)
+    }
+    this.syncWatchWasmPath()
   }
 
   async build(args: WasmTargetBuildArgs) {
@@ -185,6 +192,9 @@ class WasmTarget {
       verbose: args.verbose,
     })
 
+    if (this.inputWasmPath !== null) {
+      this.inputWasmPath = path.resolve(this.inputWasmPath)
+    }
     this.syncWatchWasmPath()
 
     return this.inputWasmPath !== null
