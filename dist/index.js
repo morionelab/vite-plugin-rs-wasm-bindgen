@@ -39,7 +39,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
-/* global Reflect, Promise, SuppressedError, Symbol */
+/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
 
 
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -380,12 +380,9 @@ class WasmManager {
         });
     }
     isTargetWasmId(id) {
-        if (/\.wasm$/i.test(id)) {
-            const dir = path__namespace.dirname(id);
-            const file = path__namespace.basename(id);
-            return this.targets.some((target) => target.match(dir, file));
-        }
-        return false;
+        const dir = path__namespace.dirname(id);
+        const file = path__namespace.basename(id);
+        return this.targets.some((target) => target.match(dir, file));
     }
     loadWasmAsProxyCode(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -434,8 +431,8 @@ class WasmTarget {
         });
     }
     buildInputWasm(args) {
-        var _a;
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
             return yield execCargoBuildWasm({
                 targetId: this.id,
@@ -450,8 +447,8 @@ class WasmTarget {
         });
     }
     locateInputWasm(args) {
-        var _a;
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             if (this.inputWasmPath !== null) {
                 return true;
             }
@@ -538,11 +535,11 @@ function rsWasmBindgen(options) {
         },
         load(id) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (!wasmManager.isTargetWasmId(id)) {
-                    return null;
+                if (/\.wasm$/i.test(id) && wasmManager.isTargetWasmId(id)) {
+                    this.addWatchFile(id);
+                    return wasmManager.loadWasmAsProxyCode(id);
                 }
-                this.addWatchFile(id);
-                return wasmManager.loadWasmAsProxyCode(id);
+                return null;
             });
         },
         watchChange(id, change) {

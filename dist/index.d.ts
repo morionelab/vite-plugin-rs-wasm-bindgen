@@ -1,4 +1,5 @@
-import { Plugin } from "vite";
+import { Plugin } from 'vite';
+
 type Options = {
     verbose?: boolean;
     suppressError?: boolean;
@@ -29,5 +30,7 @@ type TargetOptions = string | {
     inputWasmPath?: string;
     watchInputWasm?: boolean;
 };
+
 declare function rsWasmBindgen(options?: Options): Plugin;
+
 export { rsWasmBindgen as default };

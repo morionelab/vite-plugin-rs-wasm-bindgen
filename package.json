@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-rs-wasm-bindgen",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "vite plugin for bundling the wasm-bindgen output",
   "keywords": [
     "vite-plugin",
@@ -20,19 +20,17 @@
     "url": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen"
   },
   "scripts": {
-    "build": "rollup -c",
-    "lint": "eslint src --ext .ts"
+    "build": "rollup -c"
   },
   "peerDependencies": {
     "vite": "5.x"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "eslint": "^8.56.0",
-    "prettier": "3.2.4",
-    "rollup": "^3.28.1",
-    "rollup-plugin-ts": "^3.4.5",
+    "@rollup/plugin-typescript": "^12.1.1",
+    "rollup-plugin-dts": "^6.1.1",
+    "prettier": "^3.3.3",
+    "rollup": "^4.27.3",
+    "tslib": "^2.8.1",
     "typescript": "^5.2.2"
   }
 }

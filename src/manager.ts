@@ -82,14 +82,9 @@ export class WasmManager {
   }
 
   isTargetWasmId(id: string): boolean {
-    if (/\.wasm$/i.test(id)) {
-      const dir = path.dirname(id)
-      const file = path.basename(id)
-
-      return this.targets.some((target) => target.match(dir, file))
-    }
-
-    return false
+    const dir = path.dirname(id)
+    const file = path.basename(id)
+    return this.targets.some((target) => target.match(dir, file))
   }
 
   async loadWasmAsProxyCode(wasmPath: string): Promise<string> {

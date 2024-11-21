@@ -23,13 +23,11 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     },
 
     async load(id) {
-      if (!wasmManager.isTargetWasmId(id)) {
-        return null
+      if (/\.wasm$/i.test(id) && wasmManager.isTargetWasmId(id)) {
+        this.addWatchFile(id)
+        return wasmManager.loadWasmAsProxyCode(id)
       }
-
-      this.addWatchFile(id)
-
-      return wasmManager.loadWasmAsProxyCode(id)
+      return null
     },
 
     async watchChange(id, change) {
