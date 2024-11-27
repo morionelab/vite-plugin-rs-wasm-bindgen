@@ -3,6 +3,7 @@
     "strict": true,
     "target": "ES6",
     "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
     "rootDir": "src",
     "outDir": "dist"
   }

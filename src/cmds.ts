@@ -1,4 +1,4 @@
-import * as path from "node:path"
+import path from "node:path"
 import { promisify } from "node:util"
 import { execFile } from "node:child_process"
 import { Logger } from "vite"
@@ -7,7 +7,7 @@ import { Logger } from "vite"
 // cargo build
 //
 type CargoBuildWasmArgs = {
-  targetId: string
+  key: string
   skipBuild: boolean
   manifestPath: null | string
   profile: string
@@ -20,14 +20,14 @@ type CargoBuildWasmArgs = {
 export async function execCargoBuildWasm(
   args: CargoBuildWasmArgs,
 ): Promise<boolean> {
+  const key = args.key
+  const skipBuild = args.skipBuild
+  const manifestPath = args.manifestPath
+  const profile = args.profile
+  const ignoreError = args.ignoreError
   const logger = args.logger
   const verbose = args.verbose
   const suppressError = args.suppressError
-  const profile = args.profile
-  const targetId = args.targetId
-  const manifestPath = args.manifestPath
-  const skipBuild = args.skipBuild
-  const ignoreError = args.ignoreError
 
   let skipReason: null | string = null
 
@@ -39,7 +39,7 @@ export async function execCargoBuildWasm(
 
   if (skipReason !== null) {
     if (verbose) {
-      logger.info(`skip building source wasm of ${targetId} (${skipReason})`)
+      logger.info(`skip building source wasm of ${key} (${skipReason})`)
     }
     return true
   }
@@ -62,14 +62,14 @@ export async function execCargoBuildWasm(
     if (verbose) {
       const joinedArgs = commandArgs.join(" ")
       logger.info(
-        `building source wasm of ${targetId}: ${command} ${joinedArgs}`,
+        `building source wasm of ${key}: ${command} ${joinedArgs}`,
       )
     }
     await promisify(execFile)(command, commandArgs)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     const ignored = ignoreError ? " (ignored)" : ""
-    logger.error(`building source wasm of ${targetId} failed${ignored}`)
+    logger.error(`building source wasm of ${key} failed${ignored}`)
 
     if (!suppressError) {
       process.stderr.write(error.stderr)
@@ -84,7 +84,7 @@ export async function execCargoBuildWasm(
 // cargo metadata
 //
 type CargoMetadataArgs = {
-  targetId: string
+  key: string
   skipBindgen: boolean
   manifestPath: null | string
   crateName: null | string
@@ -96,7 +96,7 @@ type CargoMetadataArgs = {
 export async function execCargoMetadata(
   args: CargoMetadataArgs,
 ): Promise<null | string> {
-  const targetId = args.targetId
+  const key = args.key
   const skipBindgen = args.skipBindgen
   const manifestPath = args.manifestPath
   const givenCrateName = args.crateName
@@ -114,7 +114,7 @@ export async function execCargoMetadata(
 
   if (skipReason !== null) {
     if (verbose) {
-      console.info(`skip locating source wasm of ${targetId} (${skipReason})`)
+      console.info(`skip locating source wasm of ${key} (${skipReason})`)
     }
     return null
   }
@@ -129,12 +129,12 @@ export async function execCargoMetadata(
   let metadata: any = null
   try {
     if (verbose) {
-      console.info(`resloving input wasm of ${targetId}`)
+      console.info(`resloving input wasm of ${key}`)
     }
     const { stdout } = await promisify(execFile)(command, commandArgs)
     metadata = JSON.parse(stdout)
   } catch (error) {
-    logger.error(`reading cargo metadata of ${targetId} failed`)
+    logger.error(`reading cargo metadata of ${key} failed`)
     return null
   }
 
@@ -150,11 +150,11 @@ export async function execCargoMetadata(
   const crateName = givenCrateName ?? mainCrateName
 
   if (targetDirectory === null) {
-    logger.error(`target directory of ${targetId} is missing`)
+    logger.error(`target directory of ${key} is missing`)
     return null
   } else if (crateName === null) {
     logger.error(
-      `failed in resolving package name of ${targetId} (explicit crateName is required)`,
+      `failed in resolving package name of ${key} (explicit crateName is required)`,
     )
     return null
   }
@@ -186,7 +186,7 @@ export async function execCargoMetadata(
 // wasm-bindgen
 //
 type WasmBindgenArgs = {
-  targetId: string
+  key: string
   skipBindgen: boolean
   inputWasmPath: string
   outputDir: string
@@ -196,7 +196,7 @@ type WasmBindgenArgs = {
 }
 
 export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
-  const targetId = args.targetId
+  const key = args.key
   const skipBindgen = args.skipBindgen
   const inputWasmPath = args.inputWasmPath
   const outputDir = args.outputDir
@@ -212,7 +212,7 @@ export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
 
   if (skipReason !== null) {
     if (verbose) {
-      logger.info(`skip wasm-bindgen of ${targetId} (${skipReason})`)
+      logger.info(`skip wasm-bindgen of ${key} (${skipReason})`)
     }
     return true
   }
@@ -228,11 +228,11 @@ export async function execWasmBindgen(args: WasmBindgenArgs): Promise<boolean> {
   try {
     if (verbose) {
       const joinedArgs = commandArgs.join(" ")
-      logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`)
+      logger.info(`bindgen ${key}: ${command} ${joinedArgs}`)
     }
     await promisify(execFile)(command, commandArgs)
   } catch (error) {
-    logger.error(`bindgen ${targetId} failed`)
+    logger.error(`bindgen ${key} failed`)
     return false
   }
 

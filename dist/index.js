@@ -57,13 +57,11 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
-const MANUAL_START_FUNC = "__wbindgen_start";
-class WasmData {
-    constructor(fileName, importModules, exportNames, manualStart) {
+class WasmInfo {
+    constructor(fileName, importModules, exportNames) {
         this.fileName = fileName;
         this.importModules = importModules;
         this.exportNames = exportNames;
-        this.manualStart = manualStart;
     }
     static create(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -72,90 +70,30 @@ class WasmData {
             const wasm = yield WebAssembly.compile(buffer);
             const importModules = Array.from(new Set(WebAssembly.Module.imports(wasm).map((desc) => desc.module)).keys());
             const exportNames = Array.from(new Set(WebAssembly.Module.exports(wasm).map((desc) => desc.name)).keys());
-            // remove '__wbindgen_start' from the export names if exists
-            const manualStartIndex = exportNames.findIndex((value) => value == MANUAL_START_FUNC);
-            const manualStart = manualStartIndex != -1;
-            if (manualStart) {
-                exportNames.splice(manualStartIndex, 1);
-            }
-            return new WasmData(fileName, importModules, exportNames, manualStart);
+            return new WasmInfo(fileName, importModules, exportNames);
         });
     }
-    generateProxyCode(syncImport) {
-        const wasmUrlUrl = JSON.stringify("./" + this.fileName + "?url");
-        // import statements
-        const importStmtLines = [];
-        const importObjectItemLines = [];
-        this.importModules.forEach((importModule, index) => {
-            const importModuleLit = JSON.stringify(importModule);
-            importStmtLines.push(`import * as m${index} from ${importModuleLit};`);
-            importObjectItemLines.push(`[${importModuleLit}]: m${index},`);
-        });
-        const importStmts = importStmtLines.join("\n");
-        const importObjectItems = importObjectItemLines.join("\n");
-        // export statements
-        const exportStmtLines = [];
-        const exportAssignLines = [];
-        this.exportNames.forEach((exportName, index) => {
-            const nameLit = JSON.stringify(exportName);
-            exportStmtLines.push(`let x${index} = undefined;`, `export {x${index} as ${nameLit}};`);
-            exportAssignLines.push(`x${index} = exports[${nameLit}];`);
-        });
-        if (this.manualStart) {
-            // add dummy (nop) manual start function
-            exportStmtLines.push(`export function ${MANUAL_START_FUNC}() {}`);
-        }
-        const exportStmts = exportStmtLines.join("\n");
-        const exportAssigns = exportAssignLines.join("\n");
-        let callManualStart = "";
-        if (this.manualStart) {
-            callManualStart = `exports['${MANUAL_START_FUNC}']();`;
-        }
-        // init function
-        const initPromise = `
-    const init = (() => {
-      const imports = {
-        ${importObjectItems}
-      };
-      const source = fetch(wasmUrl);
-
-      return WebAssembly.instantiateStreaming(source, imports).then((result) => {
-        const { instance } = result;
-
-        const exports = instance.exports;
-        ${exportAssigns}
-        ${callManualStart}  
-      });
-    })();
-    `;
-        const initPromiseWaitOrExport = syncImport
-            ? `await init;`
-            : `export default init;`;
-        // generate proxy code
-        return `
-    import wasmUrl from ${wasmUrlUrl};
-
-    ${importStmts}
-
-    ${exportStmts}
-
-    ${initPromise}
-
-    ${initPromiseWaitOrExport}
-    `;
+    getFileName() {
+        return this.fileName;
+    }
+    getImportModules() {
+        return this.importModules;
+    }
+    getExportNames() {
+        return this.exportNames;
     }
 }
 
 function execCargoBuildWasm(args) {
     return __awaiter(this, void 0, void 0, function* () {
+        const key = args.key;
+        const skipBuild = args.skipBuild;
+        const manifestPath = args.manifestPath;
+        const profile = args.profile;
+        const ignoreError = args.ignoreError;
         const logger = args.logger;
         const verbose = args.verbose;
         const suppressError = args.suppressError;
-        const profile = args.profile;
-        const targetId = args.targetId;
-        const manifestPath = args.manifestPath;
-        const skipBuild = args.skipBuild;
-        const ignoreError = args.ignoreError;
         let skipReason = null;
         if (skipBuild) {
             skipReason = "skipBuild";
@@ -165,7 +103,7 @@ function execCargoBuildWasm(args) {
         }
         if (skipReason !== null) {
             if (verbose) {
-                logger.info(`skip building source wasm of ${targetId} (${skipReason})`);
+                logger.info(`skip building source wasm of ${key} (${skipReason})`);
             }
             return true;
         }
@@ -184,14 +122,14 @@ function execCargoBuildWasm(args) {
         try {
             if (verbose) {
                 const joinedArgs = commandArgs.join(" ");
-                logger.info(`building source wasm of ${targetId}: ${command} ${joinedArgs}`);
+                logger.info(`building source wasm of ${key}: ${command} ${joinedArgs}`);
             }
             yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }
         catch (error) {
             const ignored = ignoreError ? " (ignored)" : "";
-            logger.error(`building source wasm of ${targetId} failed${ignored}`);
+            logger.error(`building source wasm of ${key} failed${ignored}`);
             if (!suppressError) {
                 process.stderr.write(error.stderr);
             }
@@ -202,7 +140,7 @@ function execCargoBuildWasm(args) {
 }
 function execCargoMetadata(args) {
     return __awaiter(this, void 0, void 0, function* () {
-        const targetId = args.targetId;
+        const key = args.key;
         const skipBindgen = args.skipBindgen;
         const manifestPath = args.manifestPath;
         const givenCrateName = args.crateName;
@@ -218,7 +156,7 @@ function execCargoMetadata(args) {
         }
         if (skipReason !== null) {
             if (verbose) {
-                console.info(`skip locating source wasm of ${targetId} (${skipReason})`);
+                console.info(`skip locating source wasm of ${key} (${skipReason})`);
             }
             return null;
         }
@@ -231,13 +169,13 @@ function execCargoMetadata(args) {
         let metadata = null;
         try {
             if (verbose) {
-                console.info(`resloving input wasm of ${targetId}`);
+                console.info(`resloving input wasm of ${key}`);
             }
             const { stdout } = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
             metadata = JSON.parse(stdout);
         }
         catch (error) {
-            logger.error(`reading cargo metadata of ${targetId} failed`);
+            logger.error(`reading cargo metadata of ${key} failed`);
             return null;
         }
         const targetDirectory = metadata["target_directory"];
@@ -250,11 +188,11 @@ function execCargoMetadata(args) {
         }
         const crateName = givenCrateName !== null && givenCrateName !== void 0 ? givenCrateName : mainCrateName;
         if (targetDirectory === null) {
-            logger.error(`target directory of ${targetId} is missing`);
+            logger.error(`target directory of ${key} is missing`);
             return null;
         }
         else if (crateName === null) {
-            logger.error(`failed in resolving package name of ${targetId} (explicit crateName is required)`);
+            logger.error(`failed in resolving package name of ${key} (explicit crateName is required)`);
             return null;
         }
         let profileDirectory;
@@ -268,7 +206,7 @@ function execCargoMetadata(args) {
             // as-is (including release)
             profileDirectory = profile;
         }
-        const inputWasmPath = path__namespace.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, "_") + ".wasm");
+        const inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, "_") + ".wasm");
         if (verbose) {
             logger.info(` => ${inputWasmPath}`);
         }
@@ -277,7 +215,7 @@ function execCargoMetadata(args) {
 }
 function execWasmBindgen(args) {
     return __awaiter(this, void 0, void 0, function* () {
-        const targetId = args.targetId;
+        const key = args.key;
         const skipBindgen = args.skipBindgen;
         const inputWasmPath = args.inputWasmPath;
         const outputDir = args.outputDir;
@@ -290,7 +228,7 @@ function execWasmBindgen(args) {
         }
         if (skipReason !== null) {
             if (verbose) {
-                logger.info(`skip wasm-bindgen of ${targetId} (${skipReason})`);
+                logger.info(`skip wasm-bindgen of ${key} (${skipReason})`);
             }
             return true;
         }
@@ -303,41 +241,155 @@ function execWasmBindgen(args) {
         try {
             if (verbose) {
                 const joinedArgs = commandArgs.join(" ");
-                logger.info(`bindgen ${targetId}: ${command} ${joinedArgs}`);
+                logger.info(`bindgen ${key}: ${command} ${joinedArgs}`);
             }
             yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
         }
         catch (error) {
-            logger.error(`bindgen ${targetId} failed`);
+            logger.error(`bindgen ${key} failed`);
             return false;
         }
         return true;
     });
 }
 
+const INIT_HELPER_PREFIX = "\0virtual:rs-wasm-bindgen?init";
+const FN_MANUAL_START = "__wbindgen_start";
+class CodeGen {
+    constructor() { }
+    makeInitHelperId(key) {
+        return INIT_HELPER_PREFIX + '&' + key;
+    }
+    matchInitHelperId(id) {
+        return id.startsWith(INIT_HELPER_PREFIX);
+    }
+    genInitHelperCode() {
+        return `
+    let initPromise = null;
+    let initSub = null;
+  
+    export function hookInit(fn) {
+      initSub = fn;
+    }
+  
+    export function init() {
+      if (!initPromise && initSub) {
+        initPromise = initSub();
+        initSub = null;
+      }
+        return initPromise;
+    }
+    `;
+    }
+    genWasmProxyCode(key, wasm) {
+        const wasmUrlUrl = JSON.stringify("./" + wasm.getFileName() + "?url");
+        const initHelperModule = JSON.stringify(this.makeInitHelperId(key));
+        // import statements
+        const importStmtLines = [];
+        const importObjectItemLines = [];
+        wasm.getImportModules().forEach((importModule, index) => {
+            const importModuleLit = JSON.stringify(importModule);
+            importStmtLines.push(`import * as m${index} from ${importModuleLit};`);
+            importObjectItemLines.push(`[${importModuleLit}]: m${index},`);
+        });
+        const importStmts = importStmtLines.join("\n");
+        const importObjectItems = importObjectItemLines.join("\n");
+        // export statements
+        const exportStmtLines = [];
+        const exportAssignLines = [];
+        let hasManualStart = false;
+        wasm.getExportNames().forEach((exportName, index) => {
+            if (exportName === FN_MANUAL_START) {
+                hasManualStart = true;
+            }
+            else {
+                const nameLit = JSON.stringify(exportName);
+                exportStmtLines.push(`let x${index} = undefined;`, `export {x${index} as ${nameLit}};`);
+                exportAssignLines.push(`x${index} = exports[${nameLit}];`);
+            }
+        });
+        if (hasManualStart) {
+            // add dummy (nop) manual start function
+            exportStmtLines.push(`export function ${FN_MANUAL_START}() {}`);
+        }
+        const exportStmts = exportStmtLines.join("\n");
+        const exportAssigns = exportAssignLines.join("\n");
+        let callManualStart = "";
+        if (hasManualStart) {
+            callManualStart = `exports['${FN_MANUAL_START}']();`;
+        }
+        // init function
+        const hookInit = `
+    hookInit(() => {
+      const imports = {
+        ${importObjectItems}
+      };
+      const source = fetch(wasmUrl);
+      return WebAssembly.instantiateStreaming(source, imports)
+        .then((result) => {
+          const { instance } = result;
+  
+          const exports = instance.exports;
+          ${exportAssigns}
+          ${callManualStart}
+  
+          return {
+            instance,
+            memory: exports["memory"],
+          };
+        });  
+    });
+    `;
+        // generate proxy code
+        return `
+    import wasmUrl from ${wasmUrlUrl};
+    import { hookInit } from ${initHelperModule};
+  
+    ${importStmts}
+  
+    ${exportStmts}
+  
+    ${hookInit}
+    `;
+    }
+    transformJsCode(code, key, useAwait) {
+        const initHelperModule = JSON.stringify(this.makeInitHelperId(key));
+        let extLines = `
+    import { init } from ${initHelperModule};
+    `;
+        if (useAwait) {
+            extLines += `const initValues = await init();
+      export default initValues;
+      `;
+        }
+        else {
+            extLines += `export default init;`;
+        }
+        return code + extLines;
+    }
+}
+
 class WasmManager {
     constructor(options) {
-        var _a, _b, _c, _d;
-        this.suppressError = false;
+        var _a, _b, _c;
         // config
         this.logger = null;
-        this.root = null;
+        this.absRoot = null;
         this.isProduction = false;
         this.verbose = (_a = options.verbose) !== null && _a !== void 0 ? _a : false;
         this.suppressError = (_b = options.suppressError) !== null && _b !== void 0 ? _b : false;
-        this.syncImport = (_c = options.syncImport) !== null && _c !== void 0 ? _c : false;
         // targets
-        const targetOptions = (_d = options.targets) !== null && _d !== void 0 ? _d : {};
-        this.targets = [];
-        for (const targetId in targetOptions) {
-            const target = new WasmTarget(targetId, targetOptions[targetId]);
-            this.targets.push(target);
-        }
+        this.targets = Object.entries((_c = options.targets) !== null && _c !== void 0 ? _c : {})
+            .map(([key, targetOptions]) => new WasmTarget(key, targetOptions));
+        this.targetWasmBgIds = new Map();
+        this.targetJsIds = new Map();
+        // tools
+        this.codeGen = new CodeGen();
     }
     applyConfig(config) {
         var _a;
         this.logger = (_a = config.customLogger) !== null && _a !== void 0 ? _a : config.logger;
-        this.root = config.root;
+        this.absRoot = path.resolve(config.root);
         this.isProduction = config.isProduction;
     }
     makeBuildArgs() {
@@ -345,7 +397,7 @@ class WasmManager {
             verbose: this.verbose,
             isProduction: this.isProduction,
             logger: this.logger,
-            root: this.root,
+            absRoot: this.absRoot,
             suppressError: this.suppressError,
         };
     }
@@ -355,6 +407,26 @@ class WasmManager {
             for (const target of this.targets) {
                 yield target.build(args);
             }
+            this.updateTargetIds();
+        });
+    }
+    updateTargetIds() {
+        this.targetJsIds.clear();
+        this.targetWasmBgIds.clear();
+        this.targets.forEach((target) => {
+            // init id
+            const JsInitId = target.getOutputJsInitId();
+            if (JsInitId) {
+                this.targetJsIds.set(JsInitId, [target, false]);
+            }
+            const JsSyncId = target.getOutputJsSyncId();
+            if (JsSyncId) {
+                this.targetJsIds.set(JsSyncId, [target, true]);
+            }
+            const bgWasmId = target.getOutputBgWasmId();
+            if (bgWasmId) {
+                this.targetWasmBgIds.set(bgWasmId, target);
+            }
         });
     }
     listWatchWasmDir() {
@@ -362,7 +434,7 @@ class WasmManager {
         for (const target of this.targets) {
             const watchWasmPath = target.getWatchWasmPath();
             if (watchWasmPath != null) {
-                list.push(path__namespace.dirname(watchWasmPath));
+                list.push(path.dirname(watchWasmPath));
             }
         }
         return list;
@@ -377,27 +449,49 @@ class WasmManager {
             for (const target of targets) {
                 yield target.bindgen(args);
             }
+            this.updateTargetIds();
         });
     }
-    isTargetWasmId(id) {
-        const dir = path__namespace.dirname(id);
-        const file = path__namespace.basename(id);
-        return this.targets.some((target) => target.match(dir, file));
+    isInitHelperId(id) {
+        return this.codeGen.matchInitHelperId(id);
     }
-    loadWasmAsProxyCode(wasmPath) {
+    isTargetBgWasmId(id) {
+        return this.targetWasmBgIds.has(id);
+    }
+    isTargetJsId(id) {
+        return this.targetJsIds.has(id);
+    }
+    loadInitHelper() {
+        return this.codeGen.genInitHelperCode();
+    }
+    loadTargetBgWasm(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const wasmData = yield WasmData.create(wasmPath);
-            return wasmData.generateProxyCode(this.syncImport);
+            const target = this.targetWasmBgIds.get(id);
+            if (!target) {
+                return null;
+            }
+            const key = target.getKey();
+            const wasm = yield WasmInfo.create(id);
+            return this.codeGen.genWasmProxyCode(key, wasm);
         });
+    }
+    transformTargetJs(code, id) {
+        const entry = this.targetJsIds.get(id);
+        if (!entry) {
+            return null;
+        }
+        const [target, useAwait] = entry;
+        const key = target.getKey();
+        return this.codeGen.transformJsCode(code, key, useAwait);
     }
 }
 class WasmTarget {
-    constructor(id, options) {
+    constructor(key, options) {
         var _a, _b, _c, _d, _e, _f, _g, _h;
         if (typeof options === "string") {
             options = { manifestPath: options };
         }
-        this.id = id;
+        this.key = key;
         this.manifestPath = (_a = options.manifestPath) !== null && _a !== void 0 ? _a : null;
         this.skipBuild = (_b = options.skipBuild) !== null && _b !== void 0 ? _b : false;
         this.buildProfile = (_c = options.buildProfile) !== null && _c !== void 0 ? _c : null;
@@ -408,12 +502,13 @@ class WasmTarget {
         this.inputWasmPath = (_h = options.inputWasmPath) !== null && _h !== void 0 ? _h : null;
         this.watchWasmPath = null;
         this.outputDir = null;
-        this.outputName = null;
+        this.outputJs = null;
+        this.outputBgWasm = null;
         if (this.manifestPath !== null) {
-            this.manifestPath = path__namespace.resolve(this.manifestPath);
+            this.manifestPath = path.resolve(this.manifestPath);
         }
         if (this.inputWasmPath !== null) {
-            this.inputWasmPath = path__namespace.resolve(this.inputWasmPath);
+            this.inputWasmPath = path.resolve(this.inputWasmPath);
         }
         this.syncWatchWasmPath();
     }
@@ -435,7 +530,7 @@ class WasmTarget {
             var _a;
             const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
             return yield execCargoBuildWasm({
-                targetId: this.id,
+                key: this.key,
                 skipBuild: this.skipBuild,
                 manifestPath: this.manifestPath,
                 profile,
@@ -454,7 +549,7 @@ class WasmTarget {
             }
             const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
             this.inputWasmPath = yield execCargoMetadata({
-                targetId: this.id,
+                key: this.key,
                 skipBindgen: this.skipBindgen,
                 manifestPath: this.manifestPath,
                 crateName: this.crateName,
@@ -463,7 +558,7 @@ class WasmTarget {
                 verbose: args.verbose,
             });
             if (this.inputWasmPath !== null) {
-                this.inputWasmPath = path__namespace.resolve(this.inputWasmPath);
+                this.inputWasmPath = path.resolve(this.inputWasmPath);
             }
             this.syncWatchWasmPath();
             return this.inputWasmPath !== null;
@@ -474,11 +569,11 @@ class WasmTarget {
             if (this.inputWasmPath === null) {
                 return false;
             }
-            const targetPathPrefix = path__namespace.join(args.root, this.id);
-            const outputDir = path__namespace.dirname(targetPathPrefix);
-            const outputName = path__namespace.basename(targetPathPrefix);
+            const outputPrefix = path.join(args.absRoot, this.key);
+            const outputDir = path.dirname(outputPrefix);
+            const outputName = path.basename(outputPrefix);
             const ok = yield execWasmBindgen({
-                targetId: this.id,
+                key: this.key,
                 skipBindgen: this.skipBindgen,
                 inputWasmPath: this.inputWasmPath,
                 outputDir,
@@ -488,7 +583,8 @@ class WasmTarget {
             });
             if (ok) {
                 this.outputDir = outputDir;
-                this.outputName = outputName;
+                this.outputJs = outputName + '.js';
+                this.outputBgWasm = outputName + '_bg.wasm';
                 return true;
             }
             else {
@@ -496,25 +592,47 @@ class WasmTarget {
             }
         });
     }
-    match(dir, name) {
-        if (this.outputDir === null || this.outputName === null) {
-            return false;
-        }
-        return (path__namespace.relative(this.outputDir, dir) == "" &&
-            name.startsWith(this.outputName));
-    }
     syncWatchWasmPath() {
         if (this.inputWasmPath == null || !this.watchInputWasm) {
             this.watchWasmPath = null;
         }
         else {
-            const components = path__namespace.normalize(this.inputWasmPath).split(path__namespace.sep);
-            this.watchWasmPath = components.join("/");
+            this.watchWasmPath = normalizePath(path.normalize(this.inputWasmPath));
         }
+    }
+    getKey() {
+        return this.key;
     }
     getWatchWasmPath() {
         return this.watchWasmPath;
     }
+    getOutputJsInitId() {
+        if (this.outputDir !== null && this.outputJs) {
+            return normalizePath(path.join(this.outputDir, this.outputJs)) + '?init';
+        }
+        else {
+            return null;
+        }
+    }
+    getOutputJsSyncId() {
+        if (this.outputDir !== null && this.outputJs) {
+            return normalizePath(path.join(this.outputDir, this.outputJs)) + '?sync';
+        }
+        else {
+            return null;
+        }
+    }
+    getOutputBgWasmId() {
+        if (this.outputDir !== null && this.outputBgWasm) {
+            return normalizePath(path.join(this.outputDir, this.outputBgWasm));
+        }
+        else {
+            return null;
+        }
+    }
+}
+function normalizePath(fileName) {
+    return fileName.replace(/\\/g, "/");
 }
 
 const PLUGIN_NAME = "rs-wasm-bindgen";
@@ -533,14 +651,35 @@ function rsWasmBindgen(options) {
                 }
             });
         },
+        resolveId(source, _importer, _options) {
+            if (wasmManager.isInitHelperId(source)) {
+                return source;
+            }
+            else {
+                return null;
+            }
+        },
         load(id) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (/\.wasm$/i.test(id) && wasmManager.isTargetWasmId(id)) {
-                    this.addWatchFile(id);
-                    return wasmManager.loadWasmAsProxyCode(id);
+                if (wasmManager.isInitHelperId(id)) {
+                    return wasmManager.loadInitHelper();
                 }
-                return null;
+                else if (wasmManager.isTargetBgWasmId(id)) {
+                    this.addWatchFile(id);
+                    return wasmManager.loadTargetBgWasm(id);
+                }
+                else {
+                    return null;
+                }
             });
+        },
+        transform(code, id) {
+            if (wasmManager.isTargetJsId(id)) {
+                return wasmManager.transformTargetJs(code, id);
+            }
+            else {
+                return null;
+            }
         },
         watchChange(id, change) {
             return __awaiter(this, void 0, void 0, function* () {

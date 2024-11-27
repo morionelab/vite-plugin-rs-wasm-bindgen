@@ -3,10 +3,9 @@ import { Plugin } from 'vite';
 type Options = {
     verbose?: boolean;
     suppressError?: boolean;
-    syncImport?: boolean;
-    targets?: Record<string, TargetOptions>;
+    targets?: Record<string, string | TargetOptions>;
 };
-type TargetOptions = string | {
+type TargetOptions = {
     /**
      * Path to the `Cargo.toml` of the wasm package.
      *

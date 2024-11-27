@@ -22,12 +22,31 @@ export default function rsWasmBindgen(options?: Options): Plugin {
       }
     },
 
-    async load(id) {
-      if (/\.wasm$/i.test(id) && wasmManager.isTargetWasmId(id)) {
-        this.addWatchFile(id)
-        return wasmManager.loadWasmAsProxyCode(id)
+    resolveId(source, _importer, _options) {
+      if (wasmManager.isInitHelperId(source)) {
+        return source
+      } else {
+        return null
       }
-      return null
+    },
+
+    async load(id) {
+      if (wasmManager.isInitHelperId(id)) {
+        return wasmManager.loadInitHelper()
+      } else if (wasmManager.isTargetBgWasmId(id)) {
+        this.addWatchFile(id)
+        return wasmManager.loadTargetBgWasm(id)
+      } else {
+        return null
+      }
+    },
+
+    transform(code, id) {
+      if (wasmManager.isTargetJsId(id)) {
+        return wasmManager.transformTargetJs(code, id)
+      } else {
+        return null
+      }
     },
 
     async watchChange(id, change) {

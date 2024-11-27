@@ -1,39 +1,47 @@
+import path from "node:path"
+
 import { type ResolvedConfig, type Logger } from "vite"
-import * as path from "node:path"
 
 import { type Options, type TargetOptions } from "./options"
-import { WasmData } from "./wasmlib"
+import { WasmInfo } from "./wasminfo"
 import { execCargoBuildWasm, execCargoMetadata, execWasmBindgen } from "./cmds"
+import { CodeGen } from "./codegen"
 
 export class WasmManager {
   // options
   private verbose: boolean
-  private suppressError: boolean = false
-  private syncImport: boolean
-  private targets: Array<WasmTarget>
+  private suppressError: boolean
 
   // config
   private logger: Logger | null = null
-  private root: string | null = null
+  private absRoot: string | null = null
   private isProduction: boolean = false
+
+  // targets
+  private targets: Array<WasmTarget>
+  private targetWasmBgIds: Map<string, WasmTarget>
+  private targetJsIds: Map<string, [WasmTarget, boolean]>
+
+  // tools
+  private codeGen: CodeGen
 
   constructor(options: Options) {
     this.verbose = options.verbose ?? false
     this.suppressError = options.suppressError ?? false
-    this.syncImport = options.syncImport ?? false
 
     // targets
-    const targetOptions = options.targets ?? {}
-    this.targets = []
-    for (const targetId in targetOptions) {
-      const target = new WasmTarget(targetId, targetOptions[targetId])
-      this.targets.push(target)
-    }
+    this.targets = Object.entries(options.targets ?? {})
+      .map(([key, targetOptions]) => new WasmTarget(key, targetOptions))
+    this.targetWasmBgIds = new Map<string, WasmTarget>()
+    this.targetJsIds = new Map<string, [WasmTarget, boolean]>()
+
+    // tools
+    this.codeGen = new CodeGen()
   }
 
   applyConfig(config: ResolvedConfig) {
     this.logger = config.customLogger ?? config.logger
-    this.root = config.root
+    this.absRoot = path.resolve(config.root)
     this.isProduction = config.isProduction
   }
 
@@ -42,7 +50,7 @@ export class WasmManager {
       verbose: this.verbose,
       isProduction: this.isProduction,
       logger: this.logger!,
-      root: this.root!,
+      absRoot: this.absRoot!,
       suppressError: this.suppressError,
     }
   }
@@ -53,6 +61,30 @@ export class WasmManager {
     for (const target of this.targets) {
       await target.build(args)
     }
+    this.updateTargetIds()
+  }
+
+  private updateTargetIds() {
+    this.targetJsIds.clear()
+    this.targetWasmBgIds.clear()
+
+    this.targets.forEach((target) => {
+      // init id
+      const JsInitId = target.getOutputJsInitId()
+      if (JsInitId) {
+        this.targetJsIds.set(JsInitId, [target, false])
+      }
+
+      const JsSyncId = target.getOutputJsSyncId()
+      if (JsSyncId) {
+        this.targetJsIds.set(JsSyncId, [target, true])
+      }
+
+      const bgWasmId = target.getOutputBgWasmId()
+      if (bgWasmId) {
+        this.targetWasmBgIds.set(bgWasmId, target)
+      }
+    })
   }
 
   listWatchWasmDir(): Array<string> {
@@ -79,30 +111,62 @@ export class WasmManager {
     for (const target of targets) {
       await target.bindgen(args)
     }
+    this.updateTargetIds()
   }
 
-  isTargetWasmId(id: string): boolean {
-    const dir = path.dirname(id)
-    const file = path.basename(id)
-    return this.targets.some((target) => target.match(dir, file))
+  isInitHelperId(id: string): boolean {
+    return this.codeGen.matchInitHelperId(id)
   }
 
-  async loadWasmAsProxyCode(wasmPath: string): Promise<string> {
-    const wasmData = await WasmData.create(wasmPath)
-    return wasmData.generateProxyCode(this.syncImport)
+  isTargetBgWasmId(id: string): boolean {
+    return this.targetWasmBgIds.has(id)
   }
+
+  isTargetJsId(id: string): boolean {
+    return this.targetJsIds.has(id)
+  }
+
+  loadInitHelper(): string {
+    return this.codeGen.genInitHelperCode()
+  }
+
+  async loadTargetBgWasm(id: string): Promise<string | null> {
+    const target = this.targetWasmBgIds.get(id)
+    if (!target) {
+      return null
+    }
+
+    const key = target.getKey()
+    const wasm = await WasmInfo.create(id)
+
+    return this.codeGen.genWasmProxyCode(key, wasm)
+  }
+
+  transformTargetJs(code: string, id: string): string | null {
+    const entry = this.targetJsIds.get(id)
+    if (!entry) {
+      return null
+    }
+    const [target, useAwait] = entry
+
+    const key = target.getKey()
+
+    return this.codeGen.transformJsCode(code, key, useAwait)
+  }
+
 }
 
 type WasmTargetBuildArgs = {
   logger: Logger
   verbose: boolean
   isProduction: boolean
-  root: string
+  absRoot: string
   suppressError: boolean
 }
 
+
 class WasmTarget {
-  private id: string
+  private key: string
   private manifestPath: null | string
   private skipBuild: boolean
   private buildProfile: null | string
@@ -114,14 +178,15 @@ class WasmTarget {
   private inputWasmPath: null | string
   private watchWasmPath: null | string
   private outputDir: null | string
-  private outputName: null | string
+  private outputJs: null | string
+  private outputBgWasm: null | string
 
-  constructor(id: string, options: TargetOptions) {
+  constructor(key: string, options: string | TargetOptions) {
     if (typeof options === "string") {
       options = { manifestPath: options }
     }
 
-    this.id = id
+    this.key = key
     this.manifestPath = options.manifestPath ?? null
     this.skipBuild = options.skipBuild ?? false
     this.buildProfile = options.buildProfile ?? null
@@ -132,7 +197,8 @@ class WasmTarget {
     this.inputWasmPath = options.inputWasmPath ?? null
     this.watchWasmPath = null
     this.outputDir = null
-    this.outputName = null
+    this.outputJs = null
+    this.outputBgWasm = null
 
     if (this.manifestPath !== null) {
       this.manifestPath = path.resolve(this.manifestPath)
@@ -159,7 +225,7 @@ class WasmTarget {
     const profile = this.buildProfile ?? (args.isProduction ? "release" : "dev")
 
     return await execCargoBuildWasm({
-      targetId: this.id,
+      key: this.key,
       skipBuild: this.skipBuild,
       manifestPath: this.manifestPath,
       profile,
@@ -178,7 +244,7 @@ class WasmTarget {
     const profile = this.buildProfile ?? (args.isProduction ? "release" : "dev")
 
     this.inputWasmPath = await execCargoMetadata({
-      targetId: this.id,
+      key: this.key,
       skipBindgen: this.skipBindgen,
       manifestPath: this.manifestPath,
       crateName: this.crateName,
@@ -200,12 +266,12 @@ class WasmTarget {
       return false
     }
 
-    const targetPathPrefix = path.join(args.root, this.id)
-    const outputDir = path.dirname(targetPathPrefix)
-    const outputName = path.basename(targetPathPrefix)
+    const outputPrefix = path.join(args.absRoot, this.key)
+    const outputDir = path.dirname(outputPrefix)
+    const outputName = path.basename(outputPrefix)
 
     const ok = await execWasmBindgen({
-      targetId: this.id,
+      key: this.key,
       skipBindgen: this.skipBindgen,
       inputWasmPath: this.inputWasmPath,
       outputDir,
@@ -216,33 +282,55 @@ class WasmTarget {
 
     if (ok) {
       this.outputDir = outputDir
-      this.outputName = outputName
+      this.outputJs = outputName + '.js'
+      this.outputBgWasm = outputName + '_bg.wasm'
       return true
     } else {
       return false
     }
   }
 
-  match(dir: string, name: string): boolean {
-    if (this.outputDir === null || this.outputName === null) {
-      return false
-    }
-    return (
-      path.relative(this.outputDir, dir) == "" &&
-      name.startsWith(this.outputName)
-    )
-  }
-
   private syncWatchWasmPath() {
     if (this.inputWasmPath == null || !this.watchInputWasm) {
       this.watchWasmPath = null
     } else {
-      const components = path.normalize(this.inputWasmPath).split(path.sep)
-      this.watchWasmPath = components.join("/")
+      this.watchWasmPath = normalizePath(path.normalize(this.inputWasmPath))
     }
+  }
+
+  getKey(): string {
+    return this.key
   }
 
   getWatchWasmPath(): null | string {
     return this.watchWasmPath
   }
+
+  getOutputJsInitId(): string | null {
+    if (this.outputDir !== null && this.outputJs) {
+      return normalizePath(path.join(this.outputDir, this.outputJs)) + '?init'
+    } else {
+      return null
+    }
+  }
+
+  getOutputJsSyncId(): string | null {
+    if (this.outputDir !== null && this.outputJs) {
+      return normalizePath(path.join(this.outputDir, this.outputJs)) + '?sync'
+    } else {
+      return null
+    }
+  }
+
+  getOutputBgWasmId(): string | null {
+    if (this.outputDir !== null && this.outputBgWasm) {
+      return normalizePath(path.join(this.outputDir, this.outputBgWasm))
+    } else {
+      return null
+    }
+  }
+}
+
+function normalizePath(fileName: string): string {
+  return fileName.replace(/\\/g, "/")
 }
