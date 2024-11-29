@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-rs-wasm-bindgen",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "vite plugin to bundle wasm of rust and wasm-bindgen",
   "type": "module",
   "keywords": [
@@ -16,6 +16,9 @@
     "dist"
   ],
   "main": "dist/index.js",
+  "bin": {
+    "vite-rs-wasm-bindgen": "dist/bin/cli.js"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/morionelab/vite-plugin-rs-wasm-bindgen"

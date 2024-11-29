@@ -1,5 +1,7 @@
-import typescript from "@rollup/plugin-typescript";
-import dts from "rollup-plugin-dts";
+import typescript from "@rollup/plugin-typescript"
+import dts from "rollup-plugin-dts"
+
+const NODE_SHEBANG = "#!/usr/bin/env node"
 
 export default [
   {
@@ -19,4 +21,18 @@ export default [
     },
     plugins: [dts()],
   },
-];
+  {
+    input: "src/cli.ts",
+    output: {
+      dir: "dist/bin",
+      format: "esm",
+      banner: NODE_SHEBANG,
+    },
+    external: [/^node:/, "vite"],
+    plugins: [
+      typescript({
+        outDir: "dist/bin",
+      }),
+    ],
+  },
+]
