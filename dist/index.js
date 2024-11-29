@@ -1,29 +1,9 @@
-'use strict';
-
-var path = require('node:path');
-var fs = require('node:fs/promises');
-var node_util = require('node:util');
-var node_child_process = require('node:child_process');
-
-function _interopNamespaceDefault(e) {
-    var n = Object.create(null);
-    if (e) {
-        Object.keys(e).forEach(function (k) {
-            if (k !== 'default') {
-                var d = Object.getOwnPropertyDescriptor(e, k);
-                Object.defineProperty(n, k, d.get ? d : {
-                    enumerable: true,
-                    get: function () { return e[k]; }
-                });
-            }
-        });
-    }
-    n.default = e;
-    return Object.freeze(n);
-}
-
-var path__namespace = /*#__PURE__*/_interopNamespaceDefault(path);
-var fs__namespace = /*#__PURE__*/_interopNamespaceDefault(fs);
+import * as path from 'node:path';
+import path__default from 'node:path';
+import { createLogger, normalizePath } from 'vite';
+import * as fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -57,6 +37,44 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
+function normalizeOptions(options) {
+    var _a, _b;
+    const anyAsBool = (value) => (!!value);
+    const anyAsOptStr = (value) => (typeof value === 'string' ? value : null);
+    const verbose = anyAsBool(options.verbose);
+    const redirectStderr = anyAsBool(options.redirectStderr);
+    const useDebugBuild = anyAsBool(options.useDebugBuild);
+    const rawTargets = (_a = options.targets) !== null && _a !== void 0 ? _a : {};
+    const targets = {};
+    for (const [subId, target] of Object.entries(rawTargets)) {
+        if (typeof target === 'object') {
+            targets[subId] = {
+                skipBindgen: anyAsBool(target.skipBindgen),
+                skipBuild: anyAsBool(target.skipBuild),
+                manifestPath: anyAsOptStr(target.manifestPath),
+                useDebugBuild: anyAsBool((_b = target.useDebugBuild) !== null && _b !== void 0 ? _b : useDebugBuild),
+                rawWasmPath: anyAsOptStr(target.rawWasmPath),
+                noWatchRawWasm: anyAsBool(target.noWatchRawWasm),
+            };
+        }
+        else {
+            targets[subId] = {
+                skipBindgen: false,
+                skipBuild: false,
+                manifestPath: anyAsOptStr(target),
+                useDebugBuild, // use top-level value
+                rawWasmPath: null,
+                noWatchRawWasm: false,
+            };
+        }
+    }
+    return {
+        verbose,
+        redirectStderr,
+        targets,
+    };
+}
+
 class WasmInfo {
     constructor(fileName, importModules, exportNames) {
         this.fileName = fileName;
@@ -65,8 +83,8 @@ class WasmInfo {
     }
     static create(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
-            const fileName = path__namespace.basename(wasmPath);
-            const buffer = yield fs__namespace.readFile(wasmPath);
+            const fileName = path.basename(wasmPath);
+            const buffer = yield fs.readFile(wasmPath);
             const wasm = yield WebAssembly.compile(buffer);
             const importModules = Array.from(new Set(WebAssembly.Module.imports(wasm).map((desc) => desc.module)).keys());
             const exportNames = Array.from(new Set(WebAssembly.Module.exports(wasm).map((desc) => desc.name)).keys());
@@ -84,173 +102,202 @@ class WasmInfo {
     }
 }
 
-function execCargoBuildWasm(args) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const key = args.key;
-        const skipBuild = args.skipBuild;
-        const manifestPath = args.manifestPath;
-        const profile = args.profile;
-        const ignoreError = args.ignoreError;
-        const logger = args.logger;
-        const verbose = args.verbose;
-        const suppressError = args.suppressError;
-        let skipReason = null;
-        if (skipBuild) {
-            skipReason = "skipBuild";
-        }
-        else if (manifestPath === null) {
-            skipReason = "no manifestPath";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                logger.info(`skip building source wasm of ${key} (${skipReason})`);
+class Executor {
+    constructor(options, config) {
+        this.absRoot = path__default.resolve(config.root);
+        this.redirectStderr = options.redirectStderr;
+        this.logger = createLogger(options.verbose ? "info" : "warn", {
+            prefix: "rs-wasm",
+            allowClearScreen: config.clearScreen,
+            customLogger: config.customLogger
+        });
+    }
+    build(subId, targetOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const outputPath = path__default.resolve(this.absRoot, subId);
+            if (path__default.extname(outputPath)) {
+                this.logWarn(`target key "${subId}" has extension`);
             }
-            return true;
-        }
-        const command = "cargo";
-        const commandArgs = [];
-        commandArgs.push("build", "--lib");
-        commandArgs.push("--manifest-path", manifestPath);
-        commandArgs.push("--target", "wasm32-unknown-unknown");
-        if (profile == "release") {
-            commandArgs.push("--release");
-        }
-        else if (profile != "dev") {
-            commandArgs.push("--profile");
-            commandArgs.push(profile);
-        }
-        try {
-            if (verbose) {
-                const joinedArgs = commandArgs.join(" ");
-                logger.info(`building source wasm of ${key}: ${command} ${joinedArgs}`);
+            let rawWasmPath = targetOptions.rawWasmPath;
+            if (rawWasmPath) {
+                rawWasmPath = path__default.resolve(this.absRoot, rawWasmPath);
             }
-            yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        }
-        catch (error) {
-            const ignored = ignoreError ? " (ignored)" : "";
-            logger.error(`building source wasm of ${key} failed${ignored}`);
-            if (!suppressError) {
-                process.stderr.write(error.stderr);
+            const state = {
+                debugBuild: false,
+                rawWasmPath,
+                outputDir: path__default.dirname(outputPath),
+                outputName: path__default.basename(outputPath),
+            };
+            if (targetOptions.skipBindgen) {
+                this.logInfo(`skip build and bindgen "${subId}"`);
             }
-            return ignoreError;
-        }
-        return true;
-    });
-}
-function execCargoMetadata(args) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const key = args.key;
-        const skipBindgen = args.skipBindgen;
-        const manifestPath = args.manifestPath;
-        const givenCrateName = args.crateName;
-        const profile = args.profile;
-        const logger = args.logger;
-        const verbose = args.verbose;
-        let skipReason = null;
-        if (skipBindgen) {
-            skipReason = "skipBindgen";
-        }
-        else if (manifestPath === null) {
-            skipReason = "no manifestPath";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                console.info(`skip locating source wasm of ${key} (${skipReason})`);
+            else {
+                yield this.cargoBuild(subId, targetOptions, state);
+                yield this.resolveRawWasmPath(subId, targetOptions, state);
+                yield this.wasmBindgen(subId, targetOptions, state);
             }
-            return null;
-        }
-        const command = "cargo";
-        const commandArgs = [];
-        commandArgs.push("metadata", "--no-deps");
-        commandArgs.push("--manifest-path", manifestPath);
-        commandArgs.push("--format-version", "1");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let metadata = null;
-        try {
-            if (verbose) {
-                console.info(`resloving input wasm of ${key}`);
+            return state;
+        });
+    }
+    update(subId, targetOptions, state) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.wasmBindgen(subId, targetOptions, state);
+        });
+    }
+    cargoBuild(subId, options, state) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const subError = new Error("cargo build failed");
+            const operation = `building "${subId}" raw-wasm`;
+            if (options.skipBuild) {
+                this.logInfo(`skip ${operation}`);
+                return;
             }
-            const { stdout } = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
-            metadata = JSON.parse(stdout);
-        }
-        catch (error) {
-            logger.error(`reading cargo metadata of ${key} failed`);
-            return null;
-        }
-        const targetDirectory = metadata["target_directory"];
+            else if (options.manifestPath === null) {
+                this.logError(`FAILED ${operation}: no manifest path`);
+                throw subError;
+            }
+            const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
+            const command = "cargo";
+            const commandArgs = [];
+            commandArgs.push("build", "--lib");
+            commandArgs.push("--manifest-path", absManifestPath);
+            commandArgs.push("--target", "wasm32-unknown-unknown");
+            if (!options.useDebugBuild) {
+                commandArgs.push("--release");
+            }
+            try {
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
+                const result = yield promisify(execFile)(command, commandArgs);
+                if (this.redirectStderr) {
+                    this.printStderr(result);
+                }
+            }
+            catch (error) {
+                if (this.redirectStderr) {
+                    this.printStderr(error);
+                }
+                this.logError(`FAILED ${operation}`);
+                throw subError;
+            }
+            state.debugBuild = options.useDebugBuild;
+        });
+    }
+    resolveRawWasmPath(subId, options, state) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const subError = new Error("cargo metadata failed");
+            const operation = `resolving "${subId}" raw-wasm path`;
+            if (state.rawWasmPath) {
+                return;
+            }
+            else if (options.manifestPath === null) {
+                this.logError(`FAILED ${operation}: no manifest path`);
+                throw subError;
+            }
+            const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
+            const command = "cargo";
+            const commandArgs = [];
+            commandArgs.push("metadata");
+            commandArgs.push("--no-deps");
+            commandArgs.push("--manifest-path", absManifestPath);
+            commandArgs.push("--format-version", "1");
+            let output = "";
+            try {
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
+                const result = yield promisify(execFile)(command, commandArgs);
+                if (this.redirectStderr) {
+                    this.printStderr(result);
+                }
+                output = result.stdout;
+            }
+            catch (error) {
+                this.logError(`FAILED ${operation}`);
+                if (this.redirectStderr) {
+                    this.printStderr(error);
+                }
+                throw subError;
+            }
+            try {
+                let metadata = JSON.parse(output);
+                state.rawWasmPath = this.extractRawWasmPath(metadata, state.debugBuild);
+                this.logInfo(`resolved => ${state.rawWasmPath}`);
+            }
+            catch (error) {
+                if (typeof error === 'string') {
+                    this.logError(`FAILED ${operation}: ${error}`);
+                }
+                throw subError;
+            }
+        });
+    }
+    extractRawWasmPath(metadata, debugBuild) {
+        const targetDir = metadata["target_directory"];
         const packages = metadata["packages"];
-        let mainCrateName = null;
-        for (const package_ of packages) {
-            if (package_["manifest_path"] === manifestPath) {
-                mainCrateName = package_["name"];
+        if (packages.length > 1) {
+            throw "multiple packages";
+        }
+        const targets = packages[0].targets;
+        let libName = null;
+        for (const target of targets) {
+            const kind = target.kind;
+            if (kind.includes("cdylib")) {
+                libName = target.name;
+                break;
             }
         }
-        const crateName = givenCrateName !== null && givenCrateName !== void 0 ? givenCrateName : mainCrateName;
-        if (targetDirectory === null) {
-            logger.error(`target directory of ${key} is missing`);
-            return null;
+        if (libName === null) {
+            throw "no cdylib target";
         }
-        else if (crateName === null) {
-            logger.error(`failed in resolving package name of ${key} (explicit crateName is required)`);
-            return null;
-        }
-        let profileDirectory;
-        if (profile == "dev" || profile == "test") {
-            profileDirectory = "debug";
-        }
-        else if (profile == "bench") {
-            profileDirectory = "release";
-        }
-        else {
-            // as-is (including release)
-            profileDirectory = profile;
-        }
-        const inputWasmPath = path.join(targetDirectory, "wasm32-unknown-unknown", profileDirectory, crateName.replace(/-/g, "_") + ".wasm");
-        if (verbose) {
-            logger.info(` => ${inputWasmPath}`);
-        }
-        return inputWasmPath;
-    });
-}
-function execWasmBindgen(args) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const key = args.key;
-        const skipBindgen = args.skipBindgen;
-        const inputWasmPath = args.inputWasmPath;
-        const outputDir = args.outputDir;
-        const outputName = args.outputName;
-        const logger = args.logger;
-        const verbose = args.verbose;
-        let skipReason = null;
-        if (skipBindgen) {
-            skipReason = "skipBindgen";
-        }
-        if (skipReason !== null) {
-            if (verbose) {
-                logger.info(`skip wasm-bindgen of ${key} (${skipReason})`);
+        const wasmName = libName.replace(/-/g, "_") + ".wasm";
+        const profileDir = debugBuild ? "debug" : "release";
+        return path__default.join(targetDir, "wasm32-unknown-unknown", profileDir, wasmName);
+    }
+    wasmBindgen(subId, _options, state) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const subError = new Error("wasm-bindgen failed");
+            const operation = `generating "${subId}" module`;
+            if (state.rawWasmPath === null) {
+                this.logError(`FAILED ${operation}: no raw wasm path`);
+                throw subError;
             }
-            return true;
-        }
-        const command = "wasm-bindgen";
-        const commandArgs = [];
-        commandArgs.push("--out-dir", outputDir);
-        commandArgs.push("--out-name", outputName);
-        commandArgs.push("--target", "bundler");
-        commandArgs.push(inputWasmPath);
-        try {
-            if (verbose) {
-                const joinedArgs = commandArgs.join(" ");
-                logger.info(`bindgen ${key}: ${command} ${joinedArgs}`);
+            const command = "wasm-bindgen";
+            const commandArgs = [];
+            commandArgs.push("--out-dir", state.outputDir);
+            commandArgs.push("--out-name", state.outputName);
+            commandArgs.push("--target", "bundler");
+            commandArgs.push(state.rawWasmPath);
+            try {
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
+                const result = yield promisify(execFile)(command, commandArgs);
+                if (this.redirectStderr) {
+                    this.printStderr(result);
+                }
             }
-            yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
+            catch (error) {
+                this.logError(`FAILED ${operation}`);
+                if (this.redirectStderr) {
+                    this.printStderr(error);
+                }
+                throw subError;
+            }
+        });
+    }
+    printStderr(obj) {
+        if (obj &&
+            typeof obj === 'object' &&
+            'stderr' in obj &&
+            (typeof obj.stderr === 'string' || obj.stderr instanceof Uint8Array)) {
+            process.stderr.write(obj.stderr);
         }
-        catch (error) {
-            logger.error(`bindgen ${key} failed`);
-            return false;
-        }
-        return true;
-    });
+    }
+    logInfo(msg) {
+        this.logger.info(msg, { timestamp: true });
+    }
+    logWarn(msg) {
+        this.logger.warn(msg, { timestamp: true });
+    }
+    logError(msg) {
+        this.logger.error(msg, { timestamp: true });
+    }
 }
 
 const INIT_HELPER_PREFIX = "\0virtual:rs-wasm-bindgen?init";
@@ -371,92 +418,71 @@ class CodeGen {
 
 class WasmManager {
     constructor(options) {
-        var _a, _b, _c;
-        // config
-        this.logger = null;
-        this.absRoot = null;
-        this.isProduction = false;
-        this.verbose = (_a = options.verbose) !== null && _a !== void 0 ? _a : false;
-        this.suppressError = (_b = options.suppressError) !== null && _b !== void 0 ? _b : false;
-        // targets
-        this.targets = Object.entries((_c = options.targets) !== null && _c !== void 0 ? _c : {})
-            .map(([key, targetOptions]) => new WasmTarget(key, targetOptions));
-        this.targetWasmBgIds = new Map();
-        this.targetJsIds = new Map();
         // tools
-        this.codeGen = new CodeGen();
+        this.executor = null;
+        this.codeGen = null;
+        this.options = normalizeOptions(options);
+        this.rawWasmIds = new Map();
+        this.targetBgWasmIds = new Map();
+        this.targetJsIds = new Map();
     }
     applyConfig(config) {
-        var _a;
-        this.logger = (_a = config.customLogger) !== null && _a !== void 0 ? _a : config.logger;
-        this.absRoot = path.resolve(config.root);
-        this.isProduction = config.isProduction;
+        // tools
+        this.executor = new Executor(this.options, config);
+        this.codeGen = new CodeGen();
     }
-    makeBuildArgs() {
-        return {
-            verbose: this.verbose,
-            isProduction: this.isProduction,
-            logger: this.logger,
-            absRoot: this.absRoot,
-            suppressError: this.suppressError,
-        };
-    }
-    buildAll() {
+    buildTargets() {
         return __awaiter(this, void 0, void 0, function* () {
-            const args = this.makeBuildArgs();
-            for (const target of this.targets) {
-                yield target.build(args);
-            }
-            this.updateTargetIds();
-        });
-    }
-    updateTargetIds() {
-        this.targetJsIds.clear();
-        this.targetWasmBgIds.clear();
-        this.targets.forEach((target) => {
-            // init id
-            const JsInitId = target.getOutputJsInitId();
-            if (JsInitId) {
-                this.targetJsIds.set(JsInitId, [target, false]);
-            }
-            const JsSyncId = target.getOutputJsSyncId();
-            if (JsSyncId) {
-                this.targetJsIds.set(JsSyncId, [target, true]);
-            }
-            const bgWasmId = target.getOutputBgWasmId();
-            if (bgWasmId) {
-                this.targetWasmBgIds.set(bgWasmId, target);
+            this.rawWasmIds.clear();
+            this.targetBgWasmIds.clear();
+            this.targetJsIds.clear();
+            for (const [subId, targetOptions] of Object.entries(this.options.targets)) {
+                const state = yield this.executor.build(subId, targetOptions);
+                const info = {
+                    subId,
+                    options: targetOptions,
+                    state,
+                };
+                const rawWasmPath = info.state.rawWasmPath;
+                const outputDir = info.state.outputDir;
+                const outputName = info.state.outputName;
+                if (rawWasmPath) {
+                    const rawWasmId = normalizePath(rawWasmPath);
+                    this.rawWasmIds.set(rawWasmId, info);
+                }
+                const bgWasmId = normalizePath(path__default.join(outputDir, outputName + '_bg.wasm'));
+                this.targetBgWasmIds.set(bgWasmId, info);
+                const jsId = normalizePath(path__default.join(outputDir, outputName + '.js'));
+                this.targetJsIds.set(jsId + '?init', [info, false]);
+                this.targetJsIds.set(jsId + '?sync', [info, true]);
             }
         });
     }
     listWatchWasmDir() {
         const list = [];
-        for (const target of this.targets) {
-            const watchWasmPath = target.getWatchWasmPath();
-            if (watchWasmPath != null) {
-                list.push(path.dirname(watchWasmPath));
+        for (const [rawWasmId, info] of this.rawWasmIds.entries()) {
+            if (!info.options.noWatchRawWasm) {
+                list.push(path__default.dirname(rawWasmId));
             }
         }
         return list;
     }
-    handleWasmChange(watchWasmPath) {
+    handleRawWasmChange(rawWasmId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const targets = this.targets.filter((target) => target.getWatchWasmPath() == watchWasmPath);
-            if (targets.length == 0) {
-                return;
+            const info = this.rawWasmIds.get(rawWasmId);
+            if (info && !info.options.noWatchRawWasm) {
+                this.executor.update(info.subId, info.options, info.state);
             }
-            const args = this.makeBuildArgs();
-            for (const target of targets) {
-                yield target.bindgen(args);
-            }
-            this.updateTargetIds();
         });
     }
     isInitHelperId(id) {
         return this.codeGen.matchInitHelperId(id);
     }
+    isRawWasmId(id) {
+        return this.rawWasmIds.has(id);
+    }
     isTargetBgWasmId(id) {
-        return this.targetWasmBgIds.has(id);
+        return this.targetBgWasmIds.has(id);
     }
     isTargetJsId(id) {
         return this.targetJsIds.has(id);
@@ -466,13 +492,13 @@ class WasmManager {
     }
     loadTargetBgWasm(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const target = this.targetWasmBgIds.get(id);
-            if (!target) {
+            const info = this.targetBgWasmIds.get(id);
+            if (!info) {
                 return null;
             }
-            const key = target.getKey();
+            const subId = info === null || info === void 0 ? void 0 : info.subId;
             const wasm = yield WasmInfo.create(id);
-            return this.codeGen.genWasmProxyCode(key, wasm);
+            return this.codeGen.genWasmProxyCode(subId, wasm);
         });
     }
     transformTargetJs(code, id) {
@@ -480,179 +506,31 @@ class WasmManager {
         if (!entry) {
             return null;
         }
-        const [target, useAwait] = entry;
-        const key = target.getKey();
-        return this.codeGen.transformJsCode(code, key, useAwait);
+        const [info, useAwait] = entry;
+        const subId = info.subId;
+        return this.codeGen.transformJsCode(code, subId, useAwait);
     }
-}
-class WasmTarget {
-    constructor(key, options) {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
-        if (typeof options === "string") {
-            options = { manifestPath: options };
-        }
-        this.key = key;
-        this.manifestPath = (_a = options.manifestPath) !== null && _a !== void 0 ? _a : null;
-        this.skipBuild = (_b = options.skipBuild) !== null && _b !== void 0 ? _b : false;
-        this.buildProfile = (_c = options.buildProfile) !== null && _c !== void 0 ? _c : null;
-        this.ignoreBuildError = (_d = options.ignoreBuildError) !== null && _d !== void 0 ? _d : false;
-        this.crateName = (_e = options.crateName) !== null && _e !== void 0 ? _e : null;
-        this.skipBindgen = (_f = options.skipBindgen) !== null && _f !== void 0 ? _f : false;
-        this.watchInputWasm = (_g = options.watchInputWasm) !== null && _g !== void 0 ? _g : false;
-        this.inputWasmPath = (_h = options.inputWasmPath) !== null && _h !== void 0 ? _h : null;
-        this.watchWasmPath = null;
-        this.outputDir = null;
-        this.outputJs = null;
-        this.outputBgWasm = null;
-        if (this.manifestPath !== null) {
-            this.manifestPath = path.resolve(this.manifestPath);
-        }
-        if (this.inputWasmPath !== null) {
-            this.inputWasmPath = path.resolve(this.inputWasmPath);
-        }
-        this.syncWatchWasmPath();
-    }
-    build(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!(yield this.buildInputWasm(args))) {
-                return;
-            }
-            if (!(yield this.locateInputWasm(args))) {
-                return;
-            }
-            if (!(yield this.bindgen(args))) {
-                return;
-            }
-        });
-    }
-    buildInputWasm(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
-            return yield execCargoBuildWasm({
-                key: this.key,
-                skipBuild: this.skipBuild,
-                manifestPath: this.manifestPath,
-                profile,
-                ignoreError: this.ignoreBuildError,
-                logger: args.logger,
-                verbose: args.verbose,
-                suppressError: args.suppressError,
-            });
-        });
-    }
-    locateInputWasm(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            if (this.inputWasmPath !== null) {
-                return true;
-            }
-            const profile = (_a = this.buildProfile) !== null && _a !== void 0 ? _a : (args.isProduction ? "release" : "dev");
-            this.inputWasmPath = yield execCargoMetadata({
-                key: this.key,
-                skipBindgen: this.skipBindgen,
-                manifestPath: this.manifestPath,
-                crateName: this.crateName,
-                profile,
-                logger: args.logger,
-                verbose: args.verbose,
-            });
-            if (this.inputWasmPath !== null) {
-                this.inputWasmPath = path.resolve(this.inputWasmPath);
-            }
-            this.syncWatchWasmPath();
-            return this.inputWasmPath !== null;
-        });
-    }
-    bindgen(args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (this.inputWasmPath === null) {
-                return false;
-            }
-            const outputPrefix = path.join(args.absRoot, this.key);
-            const outputDir = path.dirname(outputPrefix);
-            const outputName = path.basename(outputPrefix);
-            const ok = yield execWasmBindgen({
-                key: this.key,
-                skipBindgen: this.skipBindgen,
-                inputWasmPath: this.inputWasmPath,
-                outputDir,
-                outputName,
-                logger: args.logger,
-                verbose: args.verbose,
-            });
-            if (ok) {
-                this.outputDir = outputDir;
-                this.outputJs = outputName + '.js';
-                this.outputBgWasm = outputName + '_bg.wasm';
-                return true;
-            }
-            else {
-                return false;
-            }
-        });
-    }
-    syncWatchWasmPath() {
-        if (this.inputWasmPath == null || !this.watchInputWasm) {
-            this.watchWasmPath = null;
-        }
-        else {
-            this.watchWasmPath = normalizePath(path.normalize(this.inputWasmPath));
-        }
-    }
-    getKey() {
-        return this.key;
-    }
-    getWatchWasmPath() {
-        return this.watchWasmPath;
-    }
-    getOutputJsInitId() {
-        if (this.outputDir !== null && this.outputJs) {
-            return normalizePath(path.join(this.outputDir, this.outputJs)) + '?init';
-        }
-        else {
-            return null;
-        }
-    }
-    getOutputJsSyncId() {
-        if (this.outputDir !== null && this.outputJs) {
-            return normalizePath(path.join(this.outputDir, this.outputJs)) + '?sync';
-        }
-        else {
-            return null;
-        }
-    }
-    getOutputBgWasmId() {
-        if (this.outputDir !== null && this.outputBgWasm) {
-            return normalizePath(path.join(this.outputDir, this.outputBgWasm));
-        }
-        else {
-            return null;
-        }
-    }
-}
-function normalizePath(fileName) {
-    return fileName.replace(/\\/g, "/");
 }
 
 const PLUGIN_NAME = "rs-wasm-bindgen";
 function rsWasmBindgen(options) {
-    const wasmManager = new WasmManager(options !== null && options !== void 0 ? options : {});
+    const manager = new WasmManager(options !== null && options !== void 0 ? options : {});
     return {
         name: PLUGIN_NAME,
+        api: manager,
         configResolved(config) {
-            wasmManager.applyConfig(config);
+            manager.applyConfig(config);
         },
         buildStart(_inputOptions) {
             return __awaiter(this, void 0, void 0, function* () {
-                yield wasmManager.buildAll();
-                for (const watchWasmDir of wasmManager.listWatchWasmDir()) {
+                yield manager.buildTargets();
+                for (const watchWasmDir of manager.listWatchWasmDir()) {
                     this.addWatchFile(watchWasmDir);
                 }
             });
         },
         resolveId(source, _importer, _options) {
-            if (wasmManager.isInitHelperId(source)) {
+            if (manager.isInitHelperId(source)) {
                 return source;
             }
             else {
@@ -661,12 +539,12 @@ function rsWasmBindgen(options) {
         },
         load(id) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (wasmManager.isInitHelperId(id)) {
-                    return wasmManager.loadInitHelper();
+                if (manager.isInitHelperId(id)) {
+                    return manager.loadInitHelper();
                 }
-                else if (wasmManager.isTargetBgWasmId(id)) {
+                else if (manager.isTargetBgWasmId(id)) {
                     this.addWatchFile(id);
-                    return wasmManager.loadTargetBgWasm(id);
+                    return manager.loadTargetBgWasm(id);
                 }
                 else {
                     return null;
@@ -674,8 +552,8 @@ function rsWasmBindgen(options) {
             });
         },
         transform(code, id) {
-            if (wasmManager.isTargetJsId(id)) {
-                return wasmManager.transformTargetJs(code, id);
+            if (manager.isTargetJsId(id)) {
+                return manager.transformTargetJs(code, id);
             }
             else {
                 return null;
@@ -683,12 +561,12 @@ function rsWasmBindgen(options) {
         },
         watchChange(id, change) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (/\.wasm$/i.test(id) && change.event != "delete") {
-                    yield wasmManager.handleWasmChange(id);
+                if (manager.isRawWasmId(id) && change.event !== 'delete') {
+                    yield manager.handleRawWasmChange(id);
                 }
             });
         },
     };
 }
 
-module.exports = rsWasmBindgen;
+export { rsWasmBindgen as default };
