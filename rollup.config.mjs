@@ -10,7 +10,7 @@ export default [
       exports: "default",
       importAttributesKey: "with",
     },
-    external: [/^node:/],
+    external: [/^node:/, "vite"],
     plugins: [typescript()],
   },
   {
