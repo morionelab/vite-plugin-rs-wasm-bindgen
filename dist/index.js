@@ -1,30 +1,9 @@
-'use strict';
-
-var path = require('node:path');
-var vite = require('vite');
-var fs = require('node:fs/promises');
-var node_child_process = require('node:child_process');
-var node_util = require('node:util');
-
-function _interopNamespaceDefault(e) {
-    var n = Object.create(null);
-    if (e) {
-        Object.keys(e).forEach(function (k) {
-            if (k !== 'default') {
-                var d = Object.getOwnPropertyDescriptor(e, k);
-                Object.defineProperty(n, k, d.get ? d : {
-                    enumerable: true,
-                    get: function () { return e[k]; }
-                });
-            }
-        });
-    }
-    n.default = e;
-    return Object.freeze(n);
-}
-
-var path__namespace = /*#__PURE__*/_interopNamespaceDefault(path);
-var fs__namespace = /*#__PURE__*/_interopNamespaceDefault(fs);
+import * as path from 'node:path';
+import path__default from 'node:path';
+import { createLogger, normalizePath } from 'vite';
+import * as fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -104,8 +83,8 @@ class WasmInfo {
     }
     static create(wasmPath) {
         return __awaiter(this, void 0, void 0, function* () {
-            const fileName = path__namespace.basename(wasmPath);
-            const buffer = yield fs__namespace.readFile(wasmPath);
+            const fileName = path.basename(wasmPath);
+            const buffer = yield fs.readFile(wasmPath);
             const wasm = yield WebAssembly.compile(buffer);
             const importModules = Array.from(new Set(WebAssembly.Module.imports(wasm).map((desc) => desc.module)).keys());
             const exportNames = Array.from(new Set(WebAssembly.Module.exports(wasm).map((desc) => desc.name)).keys());
@@ -125,9 +104,9 @@ class WasmInfo {
 
 class Executor {
     constructor(options, config) {
-        this.absRoot = path.resolve(config.root);
+        this.absRoot = path__default.resolve(config.root);
         this.redirectStderr = options.redirectStderr;
-        this.logger = vite.createLogger(options.verbose ? "info" : "warn", {
+        this.logger = createLogger(options.verbose ? "info" : "warn", {
             prefix: "rs-wasm",
             allowClearScreen: config.clearScreen,
             customLogger: config.customLogger
@@ -135,19 +114,19 @@ class Executor {
     }
     build(subId, targetOptions) {
         return __awaiter(this, void 0, void 0, function* () {
-            const outputPath = path.resolve(this.absRoot, subId);
-            if (path.extname(outputPath)) {
+            const outputPath = path__default.resolve(this.absRoot, subId);
+            if (path__default.extname(outputPath)) {
                 this.logWarn(`target key "${subId}" has extension`);
             }
             let rawWasmPath = targetOptions.rawWasmPath;
             if (rawWasmPath) {
-                rawWasmPath = path.resolve(this.absRoot, rawWasmPath);
+                rawWasmPath = path__default.resolve(this.absRoot, rawWasmPath);
             }
             const state = {
                 debugBuild: false,
                 rawWasmPath,
-                outputDir: path.dirname(outputPath),
-                outputName: path.basename(outputPath),
+                outputDir: path__default.dirname(outputPath),
+                outputName: path__default.basename(outputPath),
             };
             if (targetOptions.skipBindgen) {
                 this.logInfo(`skip build and bindgen "${subId}"`);
@@ -176,7 +155,7 @@ class Executor {
                 this.logError(`FAILED building "${subId}": no manifest path`);
                 throw subError;
             }
-            const absManifestPath = path.resolve(this.absRoot, options.manifestPath);
+            const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
             const command = "cargo";
             const commandArgs = [];
             commandArgs.push("build", "--lib");
@@ -187,7 +166,7 @@ class Executor {
             }
             try {
                 this.logInfo(`building "${subId}": ${command} ${commandArgs.join(" ")}`);
-                const result = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
+                const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
                 }
@@ -212,7 +191,7 @@ class Executor {
                 this.logError(`FAILED resloving raw wasm path of "${subId}": no manifest path`);
                 throw subError;
             }
-            const absManifestPath = path.resolve(this.absRoot, options.manifestPath);
+            const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
             const command = "cargo";
             const commandArgs = [];
             commandArgs.push("metadata");
@@ -223,7 +202,7 @@ class Executor {
             let output = "";
             try {
                 this.logInfo(`resloving raw wasm path of "${subId}": ${command} ${commandArgs.join(" ")}`);
-                const result = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
+                const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
                 }
@@ -269,7 +248,7 @@ class Executor {
         }
         const wasmName = libName.replace(/-/g, "_") + ".wasm";
         const profileDir = debugBuild ? "debug" : "release";
-        return path.join(targetDir, "wasm32-unknown-unknown", profileDir, wasmName);
+        return path__default.join(targetDir, "wasm32-unknown-unknown", profileDir, wasmName);
     }
     wasmBindgen(subId, _options, state) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -286,7 +265,7 @@ class Executor {
             commandArgs.push(state.rawWasmPath);
             try {
                 this.logInfo(`generating module "${subId}": ${command} ${commandArgs.join(" ")}`);
-                const result = yield node_util.promisify(node_child_process.execFile)(command, commandArgs);
+                const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
                 }
@@ -466,12 +445,12 @@ class WasmManager {
                 const outputDir = info.state.outputDir;
                 const outputName = info.state.outputName;
                 if (rawWasmPath) {
-                    const rawWasmId = vite.normalizePath(rawWasmPath);
+                    const rawWasmId = normalizePath(rawWasmPath);
                     this.rawWasmIds.set(rawWasmId, info);
                 }
-                const bgWasmId = vite.normalizePath(path.join(outputDir, outputName + '_bg.wasm'));
+                const bgWasmId = normalizePath(path__default.join(outputDir, outputName + '_bg.wasm'));
                 this.targetBgWasmIds.set(bgWasmId, info);
-                const jsId = vite.normalizePath(path.join(outputDir, outputName + '.js'));
+                const jsId = normalizePath(path__default.join(outputDir, outputName + '.js'));
                 this.targetJsIds.set(jsId + '?init', [info, false]);
                 this.targetJsIds.set(jsId + '?sync', [info, true]);
             }
@@ -481,7 +460,7 @@ class WasmManager {
         const list = [];
         for (const [rawWasmId, info] of this.rawWasmIds.entries()) {
             if (!info.options.noWatchRawWasm) {
-                list.push(path.dirname(rawWasmId));
+                list.push(path__default.dirname(rawWasmId));
             }
         }
         return list;
@@ -588,4 +567,4 @@ function rsWasmBindgen(options) {
     };
 }
 
-module.exports = rsWasmBindgen;
+export { rsWasmBindgen as default };

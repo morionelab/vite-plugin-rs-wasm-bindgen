@@ -6,9 +6,7 @@ export default [
     input: "src/index.ts",
     output: {
       dir: "dist",
-      format: "cjs",
-      exports: "default",
-      importAttributesKey: "with",
+      format: "esm",
     },
     external: [/^node:/, "vite"],
     plugins: [typescript()],
@@ -17,7 +15,7 @@ export default [
     input: "src/index.ts",
     output: {
       file: "dist/index.d.ts",
-      format: "es",
+      format: "esm",
     },
     plugins: [dts()],
   },
