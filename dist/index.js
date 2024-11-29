@@ -147,12 +147,13 @@ class Executor {
     cargoBuild(subId, options, state) {
         return __awaiter(this, void 0, void 0, function* () {
             const subError = new Error("cargo build failed");
+            const operation = `building "${subId}" raw-wasm`;
             if (options.skipBuild) {
-                this.logInfo(`"cargo build" of "${subId}" is skipped`);
+                this.logInfo(`skip ${operation}`);
                 return;
             }
             else if (options.manifestPath === null) {
-                this.logError(`FAILED building "${subId}": no manifest path`);
+                this.logError(`FAILED ${operation}: no manifest path`);
                 throw subError;
             }
             const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
@@ -165,7 +166,7 @@ class Executor {
                 commandArgs.push("--release");
             }
             try {
-                this.logInfo(`building "${subId}": ${command} ${commandArgs.join(" ")}`);
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
                 const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
@@ -175,7 +176,7 @@ class Executor {
                 if (this.redirectStderr) {
                     this.printStderr(error);
                 }
-                this.logError(`FAILED building "${subId}"`);
+                this.logError(`FAILED ${operation}`);
                 throw subError;
             }
             state.debugBuild = options.useDebugBuild;
@@ -184,11 +185,12 @@ class Executor {
     resolveRawWasmPath(subId, options, state) {
         return __awaiter(this, void 0, void 0, function* () {
             const subError = new Error("cargo metadata failed");
+            const operation = `resolving "${subId}" raw-wasm path`;
             if (state.rawWasmPath) {
                 return;
             }
             else if (options.manifestPath === null) {
-                this.logError(`FAILED resloving raw wasm path of "${subId}": no manifest path`);
+                this.logError(`FAILED ${operation}: no manifest path`);
                 throw subError;
             }
             const absManifestPath = path__default.resolve(this.absRoot, options.manifestPath);
@@ -198,10 +200,9 @@ class Executor {
             commandArgs.push("--no-deps");
             commandArgs.push("--manifest-path", absManifestPath);
             commandArgs.push("--format-version", "1");
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let output = "";
             try {
-                this.logInfo(`resloving raw wasm path of "${subId}": ${command} ${commandArgs.join(" ")}`);
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
                 const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
@@ -209,7 +210,7 @@ class Executor {
                 output = result.stdout;
             }
             catch (error) {
-                this.logError(`FAILED resloving raw wasm path of "${subId}"`);
+                this.logError(`FAILED ${operation}`);
                 if (this.redirectStderr) {
                     this.printStderr(error);
                 }
@@ -218,11 +219,11 @@ class Executor {
             try {
                 let metadata = JSON.parse(output);
                 state.rawWasmPath = this.extractRawWasmPath(metadata, state.debugBuild);
-                this.logInfo(`resloved raw wasm path of "${subId}": ${state.rawWasmPath}`);
+                this.logInfo(`resolved => ${state.rawWasmPath}`);
             }
             catch (error) {
                 if (typeof error === 'string') {
-                    this.logError(`FAILED resloving raw wasm path of "${subId}": ${error}`);
+                    this.logError(`FAILED ${operation}: ${error}`);
                 }
                 throw subError;
             }
@@ -253,8 +254,9 @@ class Executor {
     wasmBindgen(subId, _options, state) {
         return __awaiter(this, void 0, void 0, function* () {
             const subError = new Error("wasm-bindgen failed");
+            const operation = `generating "${subId}" module`;
             if (state.rawWasmPath === null) {
-                this.logError(`FAILED generating module "${subId}": no raw wasm path`);
+                this.logError(`FAILED ${operation}: no raw wasm path`);
                 throw subError;
             }
             const command = "wasm-bindgen";
@@ -264,14 +266,14 @@ class Executor {
             commandArgs.push("--target", "bundler");
             commandArgs.push(state.rawWasmPath);
             try {
-                this.logInfo(`generating module "${subId}": ${command} ${commandArgs.join(" ")}`);
+                this.logInfo(`${operation}: ${command} ${commandArgs.join(" ")}`);
                 const result = yield promisify(execFile)(command, commandArgs);
                 if (this.redirectStderr) {
                     this.printStderr(result);
                 }
             }
             catch (error) {
-                this.logError(`FAILED generating module "${subId}"`);
+                this.logError(`FAILED ${operation}`);
                 if (this.redirectStderr) {
                     this.printStderr(error);
                 }
