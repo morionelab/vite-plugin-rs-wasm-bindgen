@@ -30,9 +30,9 @@ async function main() {
     process.exit(1)
   }
 
-  const manager = plugin.api
+  const manager = plugin.api as WasmManager
   manager.applyConfig(config)
-  await manager.buildTargets()
+  await manager.buildTargets(true)
 }
 
 function displayHelp() {

@@ -17,7 +17,7 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     },
 
     async buildStart(_inputOptions) {
-      await manager.buildTargets()
+      await manager.buildTargets(false)
 
       for (const watchWasmDir of manager.listWatchWasmDir()) {
         this.addWatchFile(watchWasmDir)
@@ -52,7 +52,7 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     },
 
     async watchChange(id, change) {
-      if (manager.isRawWasmId(id) && change.event !== 'delete') {
+      if (manager.isRawWasmId(id) && change.event !== "delete") {
         await manager.handleRawWasmChange(id)
       }
     },

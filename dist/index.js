@@ -38,21 +38,23 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
 };
 
 function normalizeOptions(options) {
-    var _a, _b;
-    const anyAsBool = (value) => (!!value);
-    const anyAsOptStr = (value) => (typeof value === 'string' ? value : null);
+    var _a, _b, _c;
+    const anyAsBool = (value) => !!value;
+    const anyAsOptStr = (value) => (typeof value === "string" ? value : null);
+    const anyAsAutoOrBool = (value) => value === "auto" ? "auto" : anyAsBool(value);
     const verbose = anyAsBool(options.verbose);
+    const skipBindgen = anyAsAutoOrBool(options.skipBindgen);
     const redirectStderr = anyAsBool(options.redirectStderr);
     const useDebugBuild = anyAsBool(options.useDebugBuild);
     const rawTargets = (_a = options.targets) !== null && _a !== void 0 ? _a : {};
     const targets = {};
     for (const [subId, target] of Object.entries(rawTargets)) {
-        if (typeof target === 'object') {
+        if (typeof target === "object") {
             targets[subId] = {
-                skipBindgen: anyAsBool(target.skipBindgen),
+                skipBindgen: anyAsAutoOrBool((_b = target.skipBindgen) !== null && _b !== void 0 ? _b : skipBindgen),
                 skipBuild: anyAsBool(target.skipBuild),
                 manifestPath: anyAsOptStr(target.manifestPath),
-                useDebugBuild: anyAsBool((_b = target.useDebugBuild) !== null && _b !== void 0 ? _b : useDebugBuild),
+                useDebugBuild: anyAsBool((_c = target.useDebugBuild) !== null && _c !== void 0 ? _c : useDebugBuild),
                 rawWasmPath: anyAsOptStr(target.rawWasmPath),
                 noWatchRawWasm: anyAsBool(target.noWatchRawWasm),
             };
@@ -109,10 +111,10 @@ class Executor {
         this.logger = createLogger(options.verbose ? "info" : "warn", {
             prefix: "rs-wasm",
             allowClearScreen: config.clearScreen,
-            customLogger: config.customLogger
+            customLogger: config.customLogger,
         });
     }
-    build(subId, targetOptions) {
+    build(subId, targetOptions, manual) {
         return __awaiter(this, void 0, void 0, function* () {
             const outputPath = path__default.resolve(this.absRoot, subId);
             if (path__default.extname(outputPath)) {
@@ -128,7 +130,9 @@ class Executor {
                 outputDir: path__default.dirname(outputPath),
                 outputName: path__default.basename(outputPath),
             };
-            if (targetOptions.skipBindgen) {
+            if ((targetOptions.skipBindgen === "auto" && !manual) ||
+                targetOptions.skipBindgen // true
+            ) {
                 this.logInfo(`skip build and bindgen "${subId}"`);
             }
             else {
@@ -222,7 +226,7 @@ class Executor {
                 this.logInfo(`resolved => ${state.rawWasmPath}`);
             }
             catch (error) {
-                if (typeof error === 'string') {
+                if (typeof error === "string") {
                     this.logError(`FAILED ${operation}: ${error}`);
                 }
                 throw subError;
@@ -283,9 +287,9 @@ class Executor {
     }
     printStderr(obj) {
         if (obj &&
-            typeof obj === 'object' &&
-            'stderr' in obj &&
-            (typeof obj.stderr === 'string' || obj.stderr instanceof Uint8Array)) {
+            typeof obj === "object" &&
+            "stderr" in obj &&
+            (typeof obj.stderr === "string" || obj.stderr instanceof Uint8Array)) {
             process.stderr.write(obj.stderr);
         }
     }
@@ -431,13 +435,13 @@ class WasmManager {
         this.executor = new Executor(this.options, config);
         this.codeGen = new CodeGen();
     }
-    buildTargets() {
+    buildTargets(manual) {
         return __awaiter(this, void 0, void 0, function* () {
             this.rawWasmIds.clear();
             this.targetBgWasmIds.clear();
             this.targetJsIds.clear();
             for (const [subId, targetOptions] of Object.entries(this.options.targets)) {
-                const state = yield this.executor.build(subId, targetOptions);
+                const state = yield this.executor.build(subId, targetOptions, manual);
                 const info = {
                     subId,
                     options: targetOptions,
@@ -450,11 +454,11 @@ class WasmManager {
                     const rawWasmId = normalizePath(rawWasmPath);
                     this.rawWasmIds.set(rawWasmId, info);
                 }
-                const bgWasmId = normalizePath(path__default.join(outputDir, outputName + '_bg.wasm'));
+                const bgWasmId = normalizePath(path__default.join(outputDir, outputName + "_bg.wasm"));
                 this.targetBgWasmIds.set(bgWasmId, info);
-                const jsId = normalizePath(path__default.join(outputDir, outputName + '.js'));
-                this.targetJsIds.set(jsId + '?init', [info, false]);
-                this.targetJsIds.set(jsId + '?sync', [info, true]);
+                const jsId = normalizePath(path__default.join(outputDir, outputName + ".js"));
+                this.targetJsIds.set(jsId + "?init", [info, false]);
+                this.targetJsIds.set(jsId + "?sync", [info, true]);
             }
         });
     }
@@ -523,7 +527,7 @@ function rsWasmBindgen(options) {
         },
         buildStart(_inputOptions) {
             return __awaiter(this, void 0, void 0, function* () {
-                yield manager.buildTargets();
+                yield manager.buildTargets(false);
                 for (const watchWasmDir of manager.listWatchWasmDir()) {
                     this.addWatchFile(watchWasmDir);
                 }
@@ -561,7 +565,7 @@ function rsWasmBindgen(options) {
         },
         watchChange(id, change) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (manager.isRawWasmId(id) && change.event !== 'delete') {
+                if (manager.isRawWasmId(id) && change.event !== "delete") {
                     yield manager.handleRawWasmChange(id);
                 }
             });

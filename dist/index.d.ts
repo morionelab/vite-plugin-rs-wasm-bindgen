@@ -2,16 +2,27 @@ import { Plugin } from 'vite';
 
 type Options = {
     /**
-     * If true, info log is displayed.
-     * Useful to see the failed command.
+     * Setting true displays the info log.
      */
     verbose?: boolean;
     /**
-     * If true, the stderr of subprocess (e.g. `cargo build`) is redirected.
+     * Setting true redirects the stderr of subprocesses (e.g. `cargo build`).
      */
     redirectStderr?: boolean;
     /**
-     * If true, `cargo build` uses the profile *debug*;
+     * By default (false), the plugin runs `cargo build` and `wasm-bindgen` for
+     * each target when `vite` starts serving or building. This operation can be
+     * manually invoked by the provided CLI, `vite-rs-wasm-bindgen`.
+     *
+     * Setting true skips this operation anyway
+     * assuming the necessary files are already generated at the expected path.
+     *
+     * Setting 'auto' skips this operation only when `vite` starts serving or building;
+     * the operation by CLI is left available.
+     */
+    skipBindgen?: boolean | "auto";
+    /**
+     * If set true, `cargo build` uses the profile *debug*;
      * otherwise it uses the profile *release*.
      */
     useDebugBuild?: boolean;
@@ -31,13 +42,12 @@ type Options = {
 };
 type TargetOptions = {
     /**
-     * If true, `cargo build` and `wasm-bindgen` for this target is skipped
-     * assuming the necessary files are already generated at the expected path.
+     * Target-specific `skipBindgen` to overwrite the top-level setting.
      */
-    skipBindgen?: boolean;
+    skipBindgen?: boolean | "auto";
     /**
-     * If true, `cargo build` for this target is skipped
-     * assuming the necessary files are already built.
+     * If set true, `cargo build` for this target is skipped
+     * assuming the raw wasm file is already compiled.
      */
     skipBuild?: boolean;
     /**
@@ -49,8 +59,7 @@ type TargetOptions = {
      */
     manifestPath?: string;
     /**
-     * Target-specific `useDebugBuild` setting.
-     * If omitted, the top-level setting is applied.
+     * Target-specific `skipBindgen` to overwrite the top-level setting.
      */
     useDebugBuild?: boolean;
     /**

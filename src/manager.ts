@@ -1,15 +1,20 @@
 import path from "node:path"
 import { type ResolvedConfig, normalizePath } from "vite"
 
-import { type Options, NormOptions, NormTargetOptions, normalizeOptions } from "./options"
+import {
+  type Options,
+  NormOptions,
+  NormTargetOptions,
+  normalizeOptions,
+} from "./options"
 import { WasmInfo } from "./wasminfo"
 import { Executor, TargetBuildState } from "./executor"
 import { CodeGen } from "./codegen"
 
 type TargetInfo = {
-  subId: string,
-  options: NormTargetOptions,
-  state: TargetBuildState,
+  subId: string
+  options: NormTargetOptions
+  state: TargetBuildState
 }
 
 export class WasmManager {
@@ -38,13 +43,13 @@ export class WasmManager {
     this.codeGen = new CodeGen()
   }
 
-  async buildTargets() {
+  async buildTargets(manual: boolean) {
     this.rawWasmIds.clear()
     this.targetBgWasmIds.clear()
     this.targetJsIds.clear()
 
     for (const [subId, targetOptions] of Object.entries(this.options.targets)) {
-      const state = await this.executor!.build(subId, targetOptions)
+      const state = await this.executor!.build(subId, targetOptions, manual)
       const info: TargetInfo = {
         subId,
         options: targetOptions,
@@ -60,12 +65,14 @@ export class WasmManager {
         this.rawWasmIds.set(rawWasmId, info)
       }
 
-      const bgWasmId = normalizePath(path.join(outputDir, outputName + '_bg.wasm'))
+      const bgWasmId = normalizePath(
+        path.join(outputDir, outputName + "_bg.wasm"),
+      )
       this.targetBgWasmIds.set(bgWasmId, info)
 
-      const jsId = normalizePath(path.join(outputDir, outputName + '.js'))
-      this.targetJsIds.set(jsId + '?init', [info, false])
-      this.targetJsIds.set(jsId + '?sync', [info, true])
+      const jsId = normalizePath(path.join(outputDir, outputName + ".js"))
+      this.targetJsIds.set(jsId + "?init", [info, false])
+      this.targetJsIds.set(jsId + "?sync", [info, true])
     }
   }
 
@@ -129,4 +136,3 @@ export class WasmManager {
     return this.codeGen!.transformJsCode(code, subId, useAwait)
   }
 }
-

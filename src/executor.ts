@@ -14,33 +14,26 @@ export type TargetBuildState = {
 }
 
 export class Executor {
-
   private absRoot: string
   private redirectStderr: boolean
 
   private logger: Logger
 
-  constructor(
-    options: NormOptions,
-    config: ResolvedConfig
-  ) {
-
+  constructor(options: NormOptions, config: ResolvedConfig) {
     this.absRoot = path.resolve(config.root)
     this.redirectStderr = options.redirectStderr
 
-    this.logger = createLogger(
-      options.verbose ? "info" : "warn",
-      {
-        prefix: "rs-wasm",
-        allowClearScreen: config.clearScreen,
-        customLogger: config.customLogger
-      }
-    )
+    this.logger = createLogger(options.verbose ? "info" : "warn", {
+      prefix: "rs-wasm",
+      allowClearScreen: config.clearScreen,
+      customLogger: config.customLogger,
+    })
   }
 
   async build(
     subId: string,
-    targetOptions: NormTargetOptions
+    targetOptions: NormTargetOptions,
+    manual: boolean,
   ): Promise<TargetBuildState> {
     const outputPath = path.resolve(this.absRoot, subId)
     if (path.extname(outputPath)) {
@@ -59,7 +52,10 @@ export class Executor {
       outputName: path.basename(outputPath),
     }
 
-    if (targetOptions.skipBindgen) {
+    if (
+      (targetOptions.skipBindgen === "auto" && !manual) ||
+      targetOptions.skipBindgen // true
+    ) {
       this.logInfo(`skip build and bindgen "${subId}"`)
     } else {
       await this.cargoBuild(subId, targetOptions, state)
@@ -72,7 +68,7 @@ export class Executor {
   async update(
     subId: string,
     targetOptions: NormTargetOptions,
-    state: TargetBuildState
+    state: TargetBuildState,
   ) {
     await this.wasmBindgen(subId, targetOptions, state)
   }
@@ -80,7 +76,7 @@ export class Executor {
   private async cargoBuild(
     subId: string,
     options: NormTargetOptions,
-    state: TargetBuildState
+    state: TargetBuildState,
   ) {
     const subError = new Error("cargo build failed")
     const operation = `building "${subId}" raw-wasm`
@@ -114,7 +110,6 @@ export class Executor {
       if (this.redirectStderr) {
         this.printStderr(result)
       }
-
     } catch (error: unknown) {
       if (this.redirectStderr) {
         this.printStderr(error)
@@ -131,7 +126,7 @@ export class Executor {
   async resolveRawWasmPath(
     subId: string,
     options: NormTargetOptions,
-    state: TargetBuildState
+    state: TargetBuildState,
   ) {
     const subError = new Error("cargo metadata failed")
     const operation = `resolving "${subId}" raw-wasm path`
@@ -161,7 +156,6 @@ export class Executor {
         this.printStderr(result)
       }
       output = result.stdout
-
     } catch (error: unknown) {
       this.logError(`FAILED ${operation}`)
 
@@ -177,10 +171,9 @@ export class Executor {
       state.rawWasmPath = this.extractRawWasmPath(metadata, state.debugBuild)
       this.logInfo(`resolved => ${state.rawWasmPath}`)
     } catch (error: unknown) {
-      if (typeof error === 'string') {
+      if (typeof error === "string") {
         this.logError(`FAILED ${operation}: ${error}`)
       } else {
-
       }
       throw subError
     }
@@ -211,18 +204,13 @@ export class Executor {
     const wasmName = libName.replace(/-/g, "_") + ".wasm"
     const profileDir = debugBuild ? "debug" : "release"
 
-    return path.join(
-      targetDir,
-      "wasm32-unknown-unknown",
-      profileDir,
-      wasmName
-    )
+    return path.join(targetDir, "wasm32-unknown-unknown", profileDir, wasmName)
   }
 
   private async wasmBindgen(
     subId: string,
     _options: NormTargetOptions,
-    state: TargetBuildState
+    state: TargetBuildState,
   ) {
     const subError = new Error("wasm-bindgen failed")
     const operation = `generating "${subId}" module`
@@ -247,7 +235,6 @@ export class Executor {
       if (this.redirectStderr) {
         this.printStderr(result)
       }
-
     } catch (error: unknown) {
       this.logError(`FAILED ${operation}`)
 
@@ -260,10 +247,11 @@ export class Executor {
   }
 
   private printStderr(obj: unknown) {
-    if (obj &&
-      typeof obj === 'object' &&
-      'stderr' in obj &&
-      (typeof obj.stderr === 'string' || obj.stderr instanceof Uint8Array)
+    if (
+      obj &&
+      typeof obj === "object" &&
+      "stderr" in obj &&
+      (typeof obj.stderr === "string" || obj.stderr instanceof Uint8Array)
     ) {
       process.stderr.write(obj.stderr)
     }

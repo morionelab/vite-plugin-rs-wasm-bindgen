@@ -61,7 +61,7 @@ function main() {
         }
         const manager = plugin.api;
         manager.applyConfig(config);
-        yield manager.buildTargets();
+        yield manager.buildTargets(true);
     });
 }
 function displayHelp() {
