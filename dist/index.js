@@ -61,7 +61,7 @@ function normalizeOptions(options) {
         }
         else {
             targets[subId] = {
-                skipBindgen: false,
+                skipBindgen, // use top-level value
                 skipBuild: false,
                 manifestPath: anyAsOptStr(target),
                 useDebugBuild, // use top-level value
