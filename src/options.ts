@@ -10,15 +10,12 @@ export type Options = {
   redirectStderr?: boolean
 
   /**
-   * By default (false), the plugin runs `cargo build` and `wasm-bindgen` for
-   * each target when `vite` starts serving or building. This operation can be
-   * manually invoked by the provided CLI, `vite-rs-wasm-bindgen`.
+   * If set true, the execution of `cargo build` and `wasm-bindgen` is skipped
+   * for all the target (unless overwritten by the target specific setting).
    *
-   * Setting true skips this operation anyway
-   * assuming the necessary files are already generated at the expected path.
-   *
-   * Setting 'auto' skips this operation only when `vite` starts serving or building;
-   * the operation by CLI is left available.
+   * If set 'auto', only the automatic execution is skipped which runs
+   * on `vite serve` or `vite build`; the execution by the CLI `vite-rs-wasm-bindgen`
+   * is not skipped.
    */
   skipBindgen?: boolean | "auto"
 
@@ -29,13 +26,23 @@ export type Options = {
   useDebugBuild?: boolean
 
   /**
-   * Specified targets managed by this plugin.
+   * Similar to `skipBindgen` but only skips `cargo build`.
+   */
+  skipBuild?: boolean | "auto"
+
+  /**
+   * Target modules managed by this plugin.
    *
    * The key is expected to be output wasm module path without extension.
-   * Non-absolute path is resolved from the project root.
-   *
+   * The non-absolute path is resolved from the project root.
    * Internally, the key is resolved and separated to *dirname* and *basename*
    * then passed to `wasm-bindgen` as `--out-dir <dirname> --out-name <basename>`.
+   *
+   * For example the key "generated/app-wasm" will output files
+   * - ${ProjectRoot}/generated/app-wasm.js
+   * - ${ProjectRoot}/generated/app-wasm_bg.js
+   * - ${ProjectRoot}/generated/app-wasm_bg.wasm
+   * - etc.
    *
    * The value must be either a string value or an object of type `TargetOptions`.
    * The string value is considered as `manifestPath` of `TargetOptions`.
@@ -45,22 +52,21 @@ export type Options = {
 
 export type TargetOptions = {
   /**
-   * Target-specific `skipBindgen` to overwrite the top-level setting.
+   * Target specific `skipBindgen` setting.
    */
   skipBindgen?: boolean | "auto"
 
   /**
-   * If set true, `cargo build` for this target is skipped
-   * assuming the raw wasm file is already compiled.
+   * Target specific `skipBindgen` setting.
    */
-  skipBuild?: boolean
+  skipBuild?: boolean | "auto"
 
   /**
    * Path to the `Cargo.toml` of the wasm source.
    *
    * This field is required unless `skipBindgen` or `skipBuild` is true.
    *
-   * Non-absolute path is resolved from the project root.
+   * The non-absolute path is resolved from the project root.
    */
   manifestPath?: string
 
@@ -77,7 +83,7 @@ export type TargetOptions = {
    * - `manifestPath` is not set,
    * - the workspace contains multiple packages.
    *
-   * Non-absolute path is resolved from the project root.
+   * The non-absolute path is resolved from the project root.
    */
   rawWasmPath?: string
 
@@ -92,7 +98,7 @@ export type NormOptions = {
 
 export type NormTargetOptions = {
   skipBindgen: boolean | "auto"
-  skipBuild: boolean
+  skipBuild: boolean | "auto"
   manifestPath: string | null
   useDebugBuild: boolean
   rawWasmPath: string | null
@@ -109,6 +115,7 @@ export function normalizeOptions(options: Options): NormOptions {
   const skipBindgen = anyAsAutoOrBool(options.skipBindgen)
   const redirectStderr = anyAsBool(options.redirectStderr)
   const useDebugBuild = anyAsBool(options.useDebugBuild)
+  const skipBuild = anyAsAutoOrBool(options.skipBuild)
 
   const rawTargets = options.targets ?? {}
   const targets: Record<string, NormTargetOptions> = {}
@@ -117,7 +124,7 @@ export function normalizeOptions(options: Options): NormOptions {
     if (typeof target === "object") {
       targets[subId] = {
         skipBindgen: anyAsAutoOrBool(target.skipBindgen ?? skipBindgen),
-        skipBuild: anyAsBool(target.skipBuild),
+        skipBuild: anyAsBool(target.skipBuild ?? skipBuild),
         manifestPath: anyAsOptStr(target.manifestPath),
         useDebugBuild: anyAsBool(target.useDebugBuild ?? useDebugBuild),
         rawWasmPath: anyAsOptStr(target.rawWasmPath),
@@ -126,7 +133,7 @@ export function normalizeOptions(options: Options): NormOptions {
     } else {
       targets[subId] = {
         skipBindgen, // use top-level value
-        skipBuild: false,
+        skipBuild, // use top-level value
         manifestPath: anyAsOptStr(target),
         useDebugBuild, // use top-level value
         rawWasmPath: null,

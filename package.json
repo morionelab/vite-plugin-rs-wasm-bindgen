@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-rs-wasm-bindgen",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "vite plugin to bundle wasm output of wasm-bindgen (rust)",
   "type": "module",
   "keywords": [

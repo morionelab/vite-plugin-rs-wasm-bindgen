@@ -23,7 +23,7 @@ export class Executor {
     this.absRoot = path.resolve(config.root)
     this.redirectStderr = options.redirectStderr
 
-    this.logger = createLogger(options.verbose ? "info" : "warn", {
+    this.logger = createLogger(options.verbose ? "info" : "error", {
       prefix: "rs-wasm",
       allowClearScreen: config.clearScreen,
       customLogger: config.customLogger,
@@ -58,7 +58,7 @@ export class Executor {
     ) {
       this.logInfo(`skip build and bindgen "${subId}"`)
     } else {
-      await this.cargoBuild(subId, targetOptions, state)
+      await this.cargoBuild(subId, targetOptions, manual, state)
       await this.resolveRawWasmPath(subId, targetOptions, state)
       await this.wasmBindgen(subId, targetOptions, state)
     }
@@ -76,12 +76,16 @@ export class Executor {
   private async cargoBuild(
     subId: string,
     options: NormTargetOptions,
+    manual: boolean,
     state: TargetBuildState,
   ) {
     const subError = new Error("cargo build failed")
     const operation = `building "${subId}" raw-wasm`
 
-    if (options.skipBuild) {
+    if (
+      (options.skipBuild === "auto" && !manual) ||
+      options.skipBuild // true
+    ) {
       this.logInfo(`skip ${operation}`)
       return
     } else if (options.manifestPath === null) {

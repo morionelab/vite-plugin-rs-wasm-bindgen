@@ -38,7 +38,7 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
 };
 
 function normalizeOptions(options) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const anyAsBool = (value) => !!value;
     const anyAsOptStr = (value) => (typeof value === "string" ? value : null);
     const anyAsAutoOrBool = (value) => value === "auto" ? "auto" : anyAsBool(value);
@@ -46,15 +46,16 @@ function normalizeOptions(options) {
     const skipBindgen = anyAsAutoOrBool(options.skipBindgen);
     const redirectStderr = anyAsBool(options.redirectStderr);
     const useDebugBuild = anyAsBool(options.useDebugBuild);
+    const skipBuild = anyAsAutoOrBool(options.skipBuild);
     const rawTargets = (_a = options.targets) !== null && _a !== void 0 ? _a : {};
     const targets = {};
     for (const [subId, target] of Object.entries(rawTargets)) {
         if (typeof target === "object") {
             targets[subId] = {
                 skipBindgen: anyAsAutoOrBool((_b = target.skipBindgen) !== null && _b !== void 0 ? _b : skipBindgen),
-                skipBuild: anyAsBool(target.skipBuild),
+                skipBuild: anyAsBool((_c = target.skipBuild) !== null && _c !== void 0 ? _c : skipBuild),
                 manifestPath: anyAsOptStr(target.manifestPath),
-                useDebugBuild: anyAsBool((_c = target.useDebugBuild) !== null && _c !== void 0 ? _c : useDebugBuild),
+                useDebugBuild: anyAsBool((_d = target.useDebugBuild) !== null && _d !== void 0 ? _d : useDebugBuild),
                 rawWasmPath: anyAsOptStr(target.rawWasmPath),
                 noWatchRawWasm: anyAsBool(target.noWatchRawWasm),
             };
@@ -62,7 +63,7 @@ function normalizeOptions(options) {
         else {
             targets[subId] = {
                 skipBindgen, // use top-level value
-                skipBuild: false,
+                skipBuild, // use top-level value
                 manifestPath: anyAsOptStr(target),
                 useDebugBuild, // use top-level value
                 rawWasmPath: null,
@@ -108,7 +109,7 @@ class Executor {
     constructor(options, config) {
         this.absRoot = path__default.resolve(config.root);
         this.redirectStderr = options.redirectStderr;
-        this.logger = createLogger(options.verbose ? "info" : "warn", {
+        this.logger = createLogger(options.verbose ? "info" : "error", {
             prefix: "rs-wasm",
             allowClearScreen: config.clearScreen,
             customLogger: config.customLogger,
@@ -136,7 +137,7 @@ class Executor {
                 this.logInfo(`skip build and bindgen "${subId}"`);
             }
             else {
-                yield this.cargoBuild(subId, targetOptions, state);
+                yield this.cargoBuild(subId, targetOptions, manual, state);
                 yield this.resolveRawWasmPath(subId, targetOptions, state);
                 yield this.wasmBindgen(subId, targetOptions, state);
             }
@@ -148,11 +149,13 @@ class Executor {
             yield this.wasmBindgen(subId, targetOptions, state);
         });
     }
-    cargoBuild(subId, options, state) {
+    cargoBuild(subId, options, manual, state) {
         return __awaiter(this, void 0, void 0, function* () {
             const subError = new Error("cargo build failed");
             const operation = `building "${subId}" raw-wasm`;
-            if (options.skipBuild) {
+            if ((options.skipBuild === "auto" && !manual) ||
+                options.skipBuild // true
+            ) {
                 this.logInfo(`skip ${operation}`);
                 return;
             }
