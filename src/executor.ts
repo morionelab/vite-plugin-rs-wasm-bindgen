@@ -53,8 +53,8 @@ export class Executor {
     }
 
     if (
-      (targetOptions.skipBindgen === "auto" && !manual) ||
-      targetOptions.skipBindgen // true
+      targetOptions.skipBindgen &&
+      !(targetOptions.skipBindgen === "auto" && manual)
     ) {
       this.logInfo(`skip build and bindgen "${subId}"`)
     } else {
@@ -82,10 +82,7 @@ export class Executor {
     const subError = new Error("cargo build failed")
     const operation = `building "${subId}" raw-wasm`
 
-    if (
-      (options.skipBuild === "auto" && !manual) ||
-      options.skipBuild // true
-    ) {
+    if (options.skipBuild && !(options.skipBuild === "auto" && manual)) {
       this.logInfo(`skip ${operation}`)
       return
     } else if (options.manifestPath === null) {

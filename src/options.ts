@@ -124,7 +124,7 @@ export function normalizeOptions(options: Options): NormOptions {
     if (typeof target === "object") {
       targets[subId] = {
         skipBindgen: anyAsAutoOrBool(target.skipBindgen ?? skipBindgen),
-        skipBuild: anyAsBool(target.skipBuild ?? skipBuild),
+        skipBuild: anyAsAutoOrBool(target.skipBuild ?? skipBuild),
         manifestPath: anyAsOptStr(target.manifestPath),
         useDebugBuild: anyAsBool(target.useDebugBuild ?? useDebugBuild),
         rawWasmPath: anyAsOptStr(target.rawWasmPath),

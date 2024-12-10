@@ -53,7 +53,7 @@ function normalizeOptions(options) {
         if (typeof target === "object") {
             targets[subId] = {
                 skipBindgen: anyAsAutoOrBool((_b = target.skipBindgen) !== null && _b !== void 0 ? _b : skipBindgen),
-                skipBuild: anyAsBool((_c = target.skipBuild) !== null && _c !== void 0 ? _c : skipBuild),
+                skipBuild: anyAsAutoOrBool((_c = target.skipBuild) !== null && _c !== void 0 ? _c : skipBuild),
                 manifestPath: anyAsOptStr(target.manifestPath),
                 useDebugBuild: anyAsBool((_d = target.useDebugBuild) !== null && _d !== void 0 ? _d : useDebugBuild),
                 rawWasmPath: anyAsOptStr(target.rawWasmPath),
@@ -131,9 +131,8 @@ class Executor {
                 outputDir: path__default.dirname(outputPath),
                 outputName: path__default.basename(outputPath),
             };
-            if ((targetOptions.skipBindgen === "auto" && !manual) ||
-                targetOptions.skipBindgen // true
-            ) {
+            if (targetOptions.skipBindgen &&
+                !(targetOptions.skipBindgen === "auto" && manual)) {
                 this.logInfo(`skip build and bindgen "${subId}"`);
             }
             else {
@@ -153,9 +152,7 @@ class Executor {
         return __awaiter(this, void 0, void 0, function* () {
             const subError = new Error("cargo build failed");
             const operation = `building "${subId}" raw-wasm`;
-            if ((options.skipBuild === "auto" && !manual) ||
-                options.skipBuild // true
-            ) {
+            if (options.skipBuild && !(options.skipBuild === "auto" && manual)) {
                 this.logInfo(`skip ${operation}`);
                 return;
             }
