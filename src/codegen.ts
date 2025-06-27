@@ -99,11 +99,8 @@ export class CodeGen {
           const exports = instance.exports;
           ${exportAssigns}
           ${callManualStart}
-  
-          return {
-            instance,
-            memory: exports["memory"],
-          };
+
+          return instance;
         });  
     });
     `
@@ -121,21 +118,22 @@ export class CodeGen {
     `
   }
 
+  genJsInitCode(key: string): string {
+    const initHelperModule = JSON.stringify(this.makeInitHelperId(key))
 
-  transformJsCode(code: string, key: string, useAwait: boolean): string {
+    return `
+    import { init } from ${initHelperModule};
+    export default init;
+    `
+  }
+
+  transformJsCodeUseAwait(code: string, key: string): string {
     const initHelperModule = JSON.stringify(this.makeInitHelperId(key))
 
     let extLines = `
     import { init } from ${initHelperModule};
+    await init();
     `
-
-    if (useAwait) {
-      extLines += `const initValues = await init();
-      export default initValues;
-      `
-    } else {
-      extLines += `export default init;`
-    }
 
     return code + extLines
   }

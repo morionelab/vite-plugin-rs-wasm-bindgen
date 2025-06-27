@@ -6,24 +6,26 @@ import { WasmManager } from "./manager"
 const PLUGIN_NAME = "rs-wasm-bindgen"
 
 export default function rsWasmBindgen(options?: Options): Plugin {
-  const wasmManager = new WasmManager(options ?? {})
+  const manager = new WasmManager(options ?? {})
 
   return {
     name: PLUGIN_NAME,
+    api: manager,
+
     configResolved(config) {
-      wasmManager.applyConfig(config)
+      manager.applyConfig(config)
     },
 
     async buildStart(_inputOptions) {
-      await wasmManager.buildAll()
+      await manager.buildModules(false)
 
-      for (const watchWasmDir of wasmManager.listWatchWasmDir()) {
+      for (const watchWasmDir of manager.listWatchWasmDir()) {
         this.addWatchFile(watchWasmDir)
       }
     },
 
     resolveId(source, _importer, _options) {
-      if (wasmManager.isInitHelperId(source)) {
+      if (manager.isInitHelperId(source)) {
         return source
       } else {
         return null
@@ -31,27 +33,29 @@ export default function rsWasmBindgen(options?: Options): Plugin {
     },
 
     async load(id) {
-      if (wasmManager.isInitHelperId(id)) {
-        return wasmManager.loadInitHelper()
-      } else if (wasmManager.isTargetBgWasmId(id)) {
+      if (manager.isInitHelperId(id)) {
+        return manager.loadInitHelper()
+      } else if (manager.isModuleBgWasmId(id)) {
         this.addWatchFile(id)
-        return wasmManager.loadTargetBgWasm(id)
+        return manager.loadModuleBgWasm(id)
+      } else if (manager.isModuleJsInitId(id)) {
+        return manager.loadModuleJsInit(id)
       } else {
         return null
       }
     },
 
     transform(code, id) {
-      if (wasmManager.isTargetJsId(id)) {
-        return wasmManager.transformTargetJs(code, id)
+      if (manager.isModuleJsId(id)) {
+        return manager.transformModuleJs(code, id)
       } else {
         return null
       }
     },
 
     async watchChange(id, change) {
-      if (/\.wasm$/i.test(id) && change.event != "delete") {
-        await wasmManager.handleWasmChange(id)
+      if (manager.isRawWasmId(id) && change.event !== "delete") {
+        await manager.handleRawWasmChange(id)
       }
     },
   }

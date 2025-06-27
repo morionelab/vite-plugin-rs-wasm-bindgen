@@ -6,5 +6,7 @@
     "allowSyntheticDefaultImports": true,
     "rootDir": "src",
     "outDir": "dist"
-  }
+  },
+  "include": ["src"],
+  "exclude": ["examples"]
 }

@@ -1,0 +1,10 @@
+[package]
+name = "wasm-convey-game-of-life"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "*"  # should be same as "wasm-bindgen --version"

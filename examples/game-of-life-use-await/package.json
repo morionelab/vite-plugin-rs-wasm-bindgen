@@ -1,0 +1,19 @@
+{
+  "name": "game_of_life",
+  "version": "1.0.0",
+  "author": "morionelab <morionelab@gmail.com>",
+  "license": "MIT",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "serve": "vite preview",
+    "bindgen": "vite-rs-wasm-bindgen"
+  },
+  "devDependencies": {
+    "vite": "^6",
+    "vite-plugin-rs-wasm-bindgen": "file://../.."
+  },
+  "private": true
+}
